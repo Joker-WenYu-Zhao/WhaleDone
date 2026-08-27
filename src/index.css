@@ -105,9 +105,9 @@
     font-family: 'Resource Han Rounded CN', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
     /* 鲸鱼背景图（public/images/whale-bg.jpg），上层水色薄纱保证内容可读 */
     background-image:
-      linear-gradient(hsl(var(--background) / 0.86), hsl(var(--background) / 0.92)),
+      linear-gradient(hsl(var(--background) / 0.55), hsl(var(--background) / 0.65)),
       url('/images/whale-bg.jpg');
-    background-size: cover, cover;
+    background-size: auto, contain;
     background-position: center, center;
     background-repeat: no-repeat, no-repeat;
   }

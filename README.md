@@ -56,8 +56,37 @@
 
 ## 本地开发
 
+### 环境要求
+
+- **Node.js ≥ 20**（项目使用 Vite 8，不支持 Node 14/16）
+- 如已安装 nvm，切换版本：`nvm use 22.23.2`
+
+### 首次安装
+
+```bash
+# 绕过 PowerShell 执行策略（仅当前窗口生效）
+Set-ExecutionPolicy -Scope Process Bypass -Force
+
+# 安装依赖
+npm install
 ```
-# Node.js ≥ 20
-pnpm install
-npm run lint   # 代码检查
+
+### 启动开发服务器
+
+```bash
+npm run dev
+```
+
+启动后访问 `http://localhost:5173/` 即可预览。
+
+### 代码检查
+
+```bash
+npm run lint
+```
+
+### 构建生产版本
+
+```bash
+npm run build
 ```
