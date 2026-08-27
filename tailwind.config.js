@@ -23,6 +23,10 @@ export default {
             }
         },
         extend: {
+            fontFamily: {
+                hand: ['"Muyao Softbrush"', '"Resource Han Rounded CN"', 'cursive'],
+                round: ['"Resource Han Rounded CN"', '"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', 'sans-serif']
+            },
             colors: {
                 border: 'hsl(var(--border))',
                 borderColor: {

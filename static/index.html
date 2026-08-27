@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="whale.svg" />
+  <title>鲸鱼待办 · 卡通待办事项小工具</title>
+  <meta name="description" content="卡通蓝色系待办小工具：按日期与长期事项管理任务，支持勾选、拖拽排序与筛选，数据保存在本地浏览器。" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- 应用主体：固定窗口大小，任务列表在内部滚动 -->
+  <main class="app-shell" id="app">
+    <!-- 标题 -->
+    <header class="app-header">
+      <svg class="whale-mark" viewBox="0 0 132 88" role="img" aria-label="鲸鱼涂鸦">
+        <path d="M58 16 C55 11 53 8 50 5 M66 14 C66 9 67 6 69 2 M74 16 C77 11 80 9 83 7" fill="none" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
+        <path d="M12 52 C12 34 34 22 58 22 C86 22 104 36 104 50 C104 62 86 68 60 68 C34 68 12 64 12 52 Z" fill="var(--water)" stroke="var(--ink)" stroke-width="3.5"/>
+        <path d="M104 46 C110 38 116 34 122 28 C120 38 116 42 114 48 C112 54 108 58 102 58" fill="var(--water)" stroke="var(--ink)" stroke-width="3.5" stroke-linejoin="round"/>
+        <path d="M20 56 C36 62 76 63 94 57" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="1 7"/>
+        <circle cx="36" cy="42" r="3.4" fill="var(--ink)"/>
+        <ellipse cx="26" cy="50" rx="5" ry="3" fill="#F5A9B8" opacity="0.7"/>
+        <path d="M30 50 q7 6 15 3" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M62 66 C64 72 68 75 74 76 C70 68 68 64 66 62" fill="var(--water)" stroke="var(--ink)" stroke-width="3" stroke-linejoin="round"/>
+        <circle cx="118" cy="14" r="3" fill="none" stroke="var(--ink)" stroke-width="2"/>
+        <circle cx="126" cy="24" r="2" fill="none" stroke="var(--ink)" stroke-width="2"/>
+      </svg>
+      <div class="app-title">
+        <h1>鲸鱼待办</h1>
+        <p>今天的浪花，一条一条清掉</p>
+      </div>
+    </header>
+
+    <!-- Tab 切换 + 日期选择 -->
+    <div class="toolbar">
+      <div class="tabs" role="tablist" aria-label="任务类型">
+        <button type="button" class="tab is-active" data-tab="daily" role="tab" aria-selected="true">待办</button>
+        <button type="button" class="tab" data-tab="longterm" role="tab" aria-selected="false">长期</button>
+      </div>
+      <div class="date-area">
+        <input type="date" id="datePicker" class="date-input" aria-label="选择日期" />
+        <button type="button" id="todayBtn" class="btn-back-today" hidden>回今天</button>
+      </div>
+    </div>
+
+    <!-- 筛选器 -->
+    <div class="filters" role="group" aria-label="筛选">
+      <button type="button" class="chip is-active" data-filter="all" aria-pressed="true">全部</button>
+      <button type="button" class="chip" data-filter="pending" aria-pressed="false">待办</button>
+      <button type="button" class="chip" data-filter="done" aria-pressed="false">已完成</button>
+      <span id="countBadge" class="count-badge" hidden></span>
+    </div>
+
+    <!-- 任务列表 -->
+    <div class="task-scroll" id="taskScroll">
+      <ol class="task-list" id="taskList"></ol>
+      <!-- 空状态 -->
+      <div class="empty" id="emptyState" hidden>
+        <svg class="whale-mark empty-whale" viewBox="0 0 132 88" aria-hidden="true">
+          <path d="M58 16 C55 11 53 8 50 5 M66 14 C66 9 67 6 69 2 M74 16 C77 11 80 9 83 7" fill="none" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
+          <path d="M12 52 C12 34 34 22 58 22 C86 22 104 36 104 50 C104 62 86 68 60 68 C34 68 12 64 12 52 Z" fill="var(--water)" stroke="var(--ink)" stroke-width="3.5"/>
+          <path d="M104 46 C110 38 116 34 122 28 C120 38 116 42 114 48 C112 54 108 58 102 58" fill="var(--water)" stroke="var(--ink)" stroke-width="3.5" stroke-linejoin="round"/>
+          <path d="M20 56 C36 62 76 63 94 57" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="1 7"/>
+          <circle cx="36" cy="42" r="3.4" fill="var(--ink)"/>
+          <ellipse cx="26" cy="50" rx="5" ry="3" fill="#F5A9B8" opacity="0.7"/>
+          <path d="M30 50 q7 6 15 3" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M62 66 C64 72 68 75 74 76 C70 68 68 64 66 62" fill="var(--water)" stroke="var(--ink)" stroke-width="3" stroke-linejoin="round"/>
+        </svg>
+        <p class="empty-main" id="emptyMain"></p>
+        <p class="empty-sub" id="emptySub"></p>
+      </div>
+    </div>
+
+    <!-- 添加任务 -->
+    <form class="add-form" id="addForm">
+      <input type="text" id="taskInput" class="task-input" maxlength="200"
+             placeholder="添加今天的任务…" aria-label="任务内容" autocomplete="off" />
+      <button type="submit" class="btn-add">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+        添加
+      </button>
+    </form>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

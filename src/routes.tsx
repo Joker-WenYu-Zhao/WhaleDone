@@ -1,4 +1,4 @@
-import SamplePage from './pages/SamplePage';
+import TodoApp from '@/components/todo/TodoApp';
 import type { ReactNode } from 'react';
 
 export interface RouteConfig {
@@ -12,9 +12,9 @@ export interface RouteConfig {
 
 export const routes: RouteConfig[] = [
   {
-    name: 'Sample Page',
+    name: '鲸鱼待办',
     path: '/',
-    element: <SamplePage />,
+    element: <TodoApp />,
     public: true,
   }
 ];

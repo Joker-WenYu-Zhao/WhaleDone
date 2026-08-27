@@ -1,98 +1,59 @@
-## 介绍
+# 鲸鱼待办 · 卡通待办事项小工具
 
-项目介绍
+卡通蓝色系手绘风格的待办事项小工具，支持按日期管理待办任务与长期事项，数据保存在浏览器本地（localStorage），无需后端、无需登录。
 
-## 目录结构
+## 功能
+
+- **待办 / 长期** 双 Tab：待办按日期绑定，长期事项不绑定日期
+- **日期选择器**：默认今天，可切换任意日期，列表即时刷新
+- **任务自动编号**（1. 2. 3. …），拖拽换序后自动更新
+- **勾选完成 / 待办**、**删除任务**、**拖拽排序**（按住把手拖动）
+- **筛选器**：全部 / 待办 / 已完成，附完成计数
+- 任务过多时列表区域内部滚动，窗口大小保持固定
+- 所有增删改操作实时保存到 localStorage，刷新不丢数据
+
+## 目录说明
 
 ```
-├── README.md # 说明文档
-├── components.json # 组件库配置
-├── index.html # 入口文件
-├── package.json # 包管理
-├── postcss.config.js # postcss 配置
-├── public # 静态资源目录
-│   ├── favicon.png # 图标
-│   └── images # 图片资源
-├── src # 源码目录
-│   ├── App.tsx # 入口文件
-│   ├── components # 组件目录
-│   ├── contexts # 上下文目录
-│   ├── db # 数据库配置目录
-│   ├── hooks # 通用钩子函数目录
-│   ├── index.css # 全局样式
-│   ├── layout # 布局目录
-│   ├── lib # 工具库目录
-│   ├── main.tsx # 入口文件
-│   ├── routes.tsx # 路由配置
-│   ├── pages # 页面目录
-│   ├── services  # 数据库交互目录
-│   ├── types   # 类型定义目录
-├── tsconfig.app.json  # ts 前端配置文件
-├── tsconfig.json # ts 配置文件
-├── tsconfig.node.json # ts node端配置文件
-└── vite.config.ts # vite 配置文件
+├── static/            # ★ 纯静态版（上传 GitHub Pages 用）
+│   ├── index.html     # 页面结构
+│   ├── styles.css     # 卡通蓝色系样式（背景图配置在文件开头）
+│   ├── app.js         # 功能逻辑（localStorage + 拖拽排序）
+│   ├── bg.jpg         # 鲸鱼卡通背景图（直接替换同名文件即可换背景）
+│   └── whale.svg      # 网站图标
+├── src/               # React 版本（Vite + TypeScript + Tailwind）
+└── public/images/     # React 版背景图（whale-bg.jpg）
 ```
+
+## 部署到 GitHub Pages（推荐使用 static 目录）
+
+1. 新建一个 GitHub 仓库（例如 `whale-todo`）
+2. 把 `static/` 目录里的**全部文件**（index.html、styles.css、app.js、bg.jpg、whale.svg）上传到仓库根目录
+3. 仓库 Settings → Pages → Build and deployment → Source 选择 `Deploy from a branch`，分支选 `main`、目录选 `/ (root)`，保存
+4. 稍等片刻，通过 `https://<用户名>.github.io/<仓库名>/` 即可访问
+
+> 也可以直接把本仓库整体上传，然后只把 `static/` 里的文件复制到仓库根目录或 `docs/` 目录（Pages Source 选 main 分支 `/docs`）。
+
+## 更换背景图
+
+- **静态版**：把你的图片命名为 `bg.jpg`，放到 `static/` 目录覆盖原文件即可；配置写在 `styles.css` 开头（`--bg-image: url('bg.jpg')`）
+- **React 版**：替换 `public/images/whale-bg.jpg`（引用写在 `src/index.css` 的 `body` 背景里）
+- 不放图片时自动显示 CSS 绘制的海洋渐变兜底背景
+
+## 数据说明
+
+- 数据保存在浏览器 localStorage，按**域名**隔离：用 GitHub Pages 地址访问时，数据就存在那个域名下，安全且互不干扰
+- 换浏览器 / 换设备 / 清除浏览器数据后，任务数据不会同步（本地存储特性）
 
 ## 技术栈
 
-Vite、TypeScript、React、Supabase
+- 纯静态版：原生 HTML + CSS + JavaScript，零依赖，直接打开 `index.html` 也能用
+- React 版：Vite、TypeScript、React、Tailwind CSS、shadcn/ui
 
 ## 本地开发
 
-### 如何在本地编辑代码？
-
-您可以选择 [VSCode](https://code.visualstudio.com/Download) 或者您常用的任何 IDE 编辑器，唯一的要求是安装 Node.js 和 npm.
-
-### 环境要求
-
 ```
 # Node.js ≥ 20
-# npm ≥ 10
-例如：
-# node -v   # v20.18.3
-# npm -v    # 10.8.2
+pnpm install
+npm run lint   # 代码检查
 ```
-
-具体安装步骤如下：
-
-### 在 Windows 上安装 Node.js
-
-```
-# Step 1: 访问Node.js官网：https://nodejs.org/，点击下载后，会根据你的系统自动选择合适的版本（32位或64位）。
-# Step 2: 运行安装程序：下载完成后，双击运行安装程序。
-# Step 3: 完成安装：按照安装向导完成安装过程。
-# Step 4: 验证安装：在命令提示符（cmd）或IDE终端（terminal）中输入 node -v 和 npm -v 来检查 Node.js 和 npm 是否正确安装。
-```
-
-### 在 macOS 上安装 Node.js
-
-```
-# Step 1: 使用Homebrew安装（推荐方法）：打开终端。输入命令brew install node并回车。如果尚未安装Homebrew，需要先安装Homebrew，
-可以通过在终端中运行如下命令来安装：
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-或者使用官网安装程序：访问Node.js官网。下载macOS的.pkg安装包。打开下载的.pkg文件，按照提示完成安装。
-# Step 2: 验证安装：在命令提示符（cmd）或IDE终端（terminal）中输入 node -v 和 npm -v 来检查 Node.js 和 npm 是否正确安装。
-```
-
-### 安装完后按照如下步骤操作：
-
-```
-# Step 1: 下载代码包
-# Step 2: 解压代码包
-# Step 3: 用IDE打开代码包，进入代码目录
-# Step 4: IDE终端输入命令行，安装依赖：npm i
-# Step 5: IDE终端输入命令行，启动开发服务器：npm run dev -- --host 127.0.0.1
-```
-
-### 如何开发后端服务？
-
-配置环境变量，安装相关依赖
-如需使用数据库，请使用 supabase 官方版本或自行部署开源版本的 Supabase
-
-### 如何配置应用中的三方 API？
-
-具体三方 API 调用方法，请参考帮助文档：[源码导出](https://cloud.baidu.com/doc/MIAODA/s/Xmewgmsq7)，了解更多详细内容。
-
-## 了解更多
-
-您也可以查看帮助文档：[源码导出](https://cloud.baidu.com/doc/MIAODA/s/Xmewgmsq7)，了解更多详细内容。

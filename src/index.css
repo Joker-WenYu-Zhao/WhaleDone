@@ -3,89 +3,177 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here.
-All colors MUST be HSL.
-*/
+/* ===== 鲸鱼待办 · 手绘卡通蓝色系设计系统 ===== */
 
-@layer base {
-  :root {
-    --radius: 0.5rem;
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-    --destructive-foreground: 210 40% 98%;
-  }
+@font-face {
+  font-family: 'Muyao Softbrush';
+  src: url('https://resource-static.bj.bcebos.com/fonts-skill/MuyaoSoftbrush_Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-    --destructive-foreground: 210 40% 98%;
-  }
+@font-face {
+  font-family: 'Resource Han Rounded CN';
+  src: url('https://resource-static.bj.bcebos.com/fonts-skill/ResourceHanRoundedCN-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
 }
 
 @layer base {
+  :root {
+    --radius: 0.9rem;
+    /* 水色奶油底 #EAF4FB */
+    --background: 205 68% 95%;
+    /* 柔和墨蓝 #243B53 */
+    --foreground: 211 40% 23%;
+    /* 奶油白 #FDFBF7 */
+    --card: 40 60% 98%;
+    --card-foreground: 211 40% 23%;
+    --popover: 40 60% 98%;
+    --popover-foreground: 211 40% 23%;
+    /* 海蓝 #2D6BB0 */
+    --primary: 212 59% 43%;
+    --primary-foreground: 0 0% 100%;
+    /* 水蓝 #8FC6EA */
+    --secondary: 204 68% 74%;
+    --secondary-foreground: 211 40% 23%;
+    /* 浅水蓝 #DCEBF7 */
+    --muted: 207 63% 92%;
+    --muted-foreground: 210 29% 43%;
+    /* 珊瑚橙 #E05F1A */
+    --accent: 21 79% 49%;
+    --accent-foreground: 21 82% 11%;
+    --destructive: 21 79% 49%;
+    --destructive-foreground: 21 82% 11%;
+    /* 墨蓝铅笔线 #35597A */
+    --border: 209 39% 34%;
+    --input: 206 47% 60%;
+    --ring: 212 59% 43%;
+    --shadow-ink: 206 38% 45%;
+    --chart-1: 212 59% 43%;
+    --chart-2: 204 68% 74%;
+    --chart-3: 21 79% 49%;
+    --chart-4: 197 37% 24%;
+    --chart-5: 205 68% 95%;
+    --sidebar-background: 205 68% 95%;
+    --sidebar-foreground: 211 40% 23%;
+    --sidebar-primary: 212 59% 43%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 207 63% 92%;
+    --sidebar-accent-foreground: 211 40% 23%;
+    --sidebar-border: 209 39% 34%;
+    --sidebar-ring: 212 59% 43%;
+  }
+
+  /* 海洋夜色（暗色主题备用） */
+  .dark {
+    --background: 211 42% 13%;
+    --foreground: 205 68% 95%;
+    --card: 211 38% 17%;
+    --card-foreground: 205 68% 95%;
+    --popover: 211 38% 17%;
+    --popover-foreground: 205 68% 95%;
+    --primary: 204 68% 74%;
+    --primary-foreground: 211 45% 14%;
+    --secondary: 210 32% 28%;
+    --secondary-foreground: 205 68% 95%;
+    --muted: 210 32% 24%;
+    --muted-foreground: 206 30% 72%;
+    --accent: 21 79% 58%;
+    --accent-foreground: 21 82% 10%;
+    --destructive: 21 79% 58%;
+    --destructive-foreground: 21 82% 10%;
+    --border: 209 34% 46%;
+    --input: 209 34% 40%;
+    --ring: 204 68% 74%;
+    --shadow-ink: 210 40% 8%;
+  }
+
   * {
     @apply border-border;
   }
 
-  body {
-    @apply bg-background text-foreground;
+  html {
+    height: 100%;
   }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    min-height: 100dvh;
+    font-family: 'Resource Han Rounded CN', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    /* 鲸鱼背景图（public/images/whale-bg.jpg），上层水色薄纱保证内容可读 */
+    background-image:
+      linear-gradient(hsl(var(--background) / 0.86), hsl(var(--background) / 0.92)),
+      url('/images/whale-bg.jpg');
+    background-size: cover, cover;
+    background-position: center, center;
+    background-repeat: no-repeat, no-repeat;
+  }
+}
+
+@layer utilities {
+  /* 手绘抖动圆角（核心视觉签名，!important 覆盖组件默认圆角） */
+  .wobble {
+    border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px !important;
+  }
+  .wobble-sm {
+    border-radius: 125px 10px 115px 10px / 10px 115px 10px 125px !important;
+  }
+  .wobble-lg {
+    border-radius: 26px 34px 28px 32px / 32px 28px 34px 26px !important;
+  }
+  /* 硬偏移贴纸阴影（!important 覆盖组件默认 shadow） */
+  .doodle-shadow {
+    box-shadow: 5px 5px 0 hsl(var(--shadow-ink) / 0.4) !important;
+  }
+  .doodle-shadow-sm {
+    box-shadow: 2.5px 2.5px 0 hsl(var(--shadow-ink) / 0.35) !important;
+  }
+  /* 贴纸按压反馈 */
+  .press {
+    transition: transform 140ms ease, box-shadow 140ms ease;
+  }
+  .press:hover {
+    transform: rotate(-0.6deg);
+  }
+  .press:active {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 hsl(var(--shadow-ink) / 0.35) !important;
+  }
+  /* 纸感点阵 */
+  .paper-dots {
+    background-image: radial-gradient(hsl(var(--secondary) / 0.4) 1.2px, transparent 1.2px);
+    background-size: 20px 20px;
+  }
+  /* 应用外壳：窗口固定大小，列表在内部滚动 */
+  .app-shell {
+    height: min(700px, calc(100dvh - 2rem));
+  }
+}
+
+/* 空输入抖动提示 */
+@keyframes shake-x {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.shake {
+  animation: shake-x 360ms ease;
+}
+
+/* 任务完成划线 */
+.task-done-text {
+  text-decoration: line-through;
+  text-decoration-color: hsl(var(--secondary));
+  text-decoration-thickness: 2px;
+}
+
+/* 细滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--secondary)) transparent;
 }
