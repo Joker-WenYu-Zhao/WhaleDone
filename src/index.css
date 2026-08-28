@@ -107,7 +107,7 @@
     background-image:
       linear-gradient(hsl(var(--background) / 0.55), hsl(var(--background) / 0.65)),
       url('/images/whale-bg.jpg');
-    background-size: auto, contain;
+    background-size: auto, cover;
     background-position: center, center;
     background-repeat: no-repeat, no-repeat;
   }

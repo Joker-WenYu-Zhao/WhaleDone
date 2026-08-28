@@ -1,50 +1,69 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Reorder, useDragControls } from 'motion/react'
 import { Checkbox } from '@/components/ui/checkbox'
-import { GripVertical, Trash2 } from 'lucide-react'
+import { Check, GripVertical, Pencil, Trash2, X } from 'lucide-react'
 import type { Task } from '@/lib/todo'
 
 interface TaskItemProps {
   task: Task
   /** 列表中显示的序号（按筛选后的顺序自动生成） */
   index: number
-  isDragging: boolean
   onToggle: (id: string) => void
   onDelete: (id: string) => void
-  onDragStart: (id: string) => void
-  onDragEnter: (id: string) => void
-  onDragEnd: () => void
+  onEdit: (id: string, text: string) => void
 }
 
 export default function TaskItem({
   task,
   index,
-  isDragging,
   onToggle,
   onDelete,
-  onDragStart,
-  onDragEnter,
-  onDragEnd,
+  onEdit,
 }: TaskItemProps) {
-  // 仅在按住拖拽把手时允许整行拖动
-  const [dragEnabled, setDragEnabled] = useState(false)
+  // Reorder 拖拽控制器：只有按住把手才启动拖动，不影响勾选和文本选择
+  const controls = useDragControls()
+  // 行内编辑状态：进入编辑时把当前文本拷贝到草稿，保存才写回
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const editRef = useRef<HTMLTextAreaElement>(null)
+
+  const startEdit = () => {
+    setDraft(task.text)
+    setEditing(true)
+  }
+
+  const cancelEdit = () => {
+    setEditing(false)
+    setDraft('')
+  }
+
+  const saveEdit = () => {
+    const text = draft.trim()
+    if (!text) {
+      // 空内容不允许保存，聚焦回去提示
+      editRef.current?.focus()
+      return
+    }
+    onEdit(task.id, text)
+    setEditing(false)
+    setDraft('')
+  }
+
+  // 编辑框高度随内容自适应（上限 120px，超出内部滚动）
+  useEffect(() => {
+    const el = editRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`
+  }, [draft])
 
   return (
-    <li
-      draggable={dragEnabled}
-      onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = 'move'
-        onDragStart(task.id)
-      }}
-      onDragEnter={() => onDragEnter(task.id)}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => e.preventDefault()}
-      onDragEnd={() => {
-        setDragEnabled(false)
-        onDragEnd()
-      }}
-      className={`wobble-sm doodle-shadow-sm flex items-center gap-2 border-2 border-border bg-card px-2.5 py-1.5 transition-opacity ${
-        isDragging ? 'opacity-50' : ''
-      }`}
+    <Reorder.Item
+      value={task}
+      dragListener={false}
+      dragControls={controls}
+      whileDrag={{ scale: 1.04, rotate: 1 }}
+      className="wobble-sm doodle-shadow-sm relative z-10 flex items-center gap-2 border-2 border-border bg-card px-2.5 py-1.5"
     >
       {/* 自动编号 */}
       <span aria-hidden="true" className="w-6 shrink-0 text-center font-hand text-lg leading-none text-primary">
@@ -59,37 +78,94 @@ export default function TaskItem({
         className="h-5 w-5 wobble-sm border-2 border-border data-[state=checked]:border-primary"
       />
 
-      {/* 任务内容 */}
-      <span
-        className={`min-w-0 flex-1 break-words text-sm leading-relaxed ${
-          task.done ? 'task-done-text text-muted-foreground' : 'text-foreground'
-        }`}
-      >
-        {task.text}
-      </span>
+      {editing ? (
+        <>
+          {/* 编辑中的输入框：回车保存、Shift+回车换行、Esc 取消 */}
+          <textarea
+            ref={editRef}
+            value={draft}
+            autoFocus
+            rows={1}
+            maxLength={200}
+            aria-label="编辑任务内容"
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                saveEdit()
+              }
+              if (e.key === 'Escape') cancelEdit()
+            }}
+            className="wobble-sm min-w-0 flex-1 resize-none overflow-y-auto rounded-lg border-2 border-primary bg-card px-2 py-1 text-sm leading-relaxed text-foreground outline-none"
+          />
 
-      {/* 拖拽把手 */}
-      <button
-        type="button"
-        aria-label="拖动调整顺序"
-        title="拖动调整顺序"
-        onMouseDown={() => setDragEnabled(true)}
-        onMouseUp={() => setDragEnabled(false)}
-        className="flex size-10 shrink-0 cursor-grab touch-none items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing"
-      >
-        <GripVertical className="size-5" />
-      </button>
+          {/* 取消编辑 */}
+          <button
+            type="button"
+            aria-label="取消编辑"
+            title="取消编辑"
+            onClick={cancelEdit}
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground active:scale-90"
+          >
+            <X className="size-5" />
+          </button>
 
-      {/* 删除 */}
-      <button
-        type="button"
-        aria-label="删除任务"
-        title="删除任务"
-        onClick={() => onDelete(task.id)}
-        className="flex size-10 shrink-0 items-center justify-center rounded-xl text-accent hover:bg-accent/15 active:scale-90"
-      >
-        <Trash2 className="size-5" />
-      </button>
-    </li>
+          {/* 保存修改 */}
+          <button
+            type="button"
+            aria-label="保存修改"
+            title="保存修改"
+            onClick={saveEdit}
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl text-primary hover:bg-primary/15 active:scale-90"
+          >
+            <Check className="size-5" />
+          </button>
+        </>
+      ) : (
+        <>
+          {/* 任务内容（完整展示，过长自动换行，保留手动换行） */}
+          <span
+            className={`min-w-0 flex-1 whitespace-pre-wrap break-words text-sm leading-relaxed ${
+              task.done ? 'task-done-text text-muted-foreground' : 'text-foreground'
+            }`}
+          >
+            {task.text}
+          </span>
+
+          {/* 拖拽把手 */}
+          <button
+            type="button"
+            aria-label="拖动调整顺序"
+            title="拖动调整顺序"
+            onPointerDown={(e) => controls.start(e)}
+            className="flex size-10 shrink-0 cursor-grab touch-none items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing"
+          >
+            <GripVertical className="size-5" />
+          </button>
+
+          {/* 编辑 */}
+          <button
+            type="button"
+            aria-label="编辑任务"
+            title="编辑任务"
+            onClick={startEdit}
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl text-primary hover:bg-primary/15 active:scale-90"
+          >
+            <Pencil className="size-5" />
+          </button>
+
+          {/* 删除 */}
+          <button
+            type="button"
+            aria-label="删除任务"
+            title="删除任务"
+            onClick={() => onDelete(task.id)}
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl text-accent hover:bg-accent/15 active:scale-90"
+          >
+            <Trash2 className="size-5" />
+          </button>
+        </>
+      )}
+    </Reorder.Item>
   )
 }

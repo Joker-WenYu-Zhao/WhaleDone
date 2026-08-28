@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Reorder } from 'motion/react'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,14 +26,21 @@ export default function TodoApp() {
   const [filter, setFilter] = useState<FilterKey>('all')
   const [input, setInput] = useState('')
   const [shake, setShake] = useState(false)
-  const [draggingId, setDraggingId] = useState<string | null>(null)
-  const dragIdRef = useRef<string | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const dateRef = useRef<HTMLInputElement>(null)
 
   // 任何数据变化都实时保存
   useEffect(() => {
     saveData(data)
   }, [data])
+
+  // 添加框高度随内容自适应（上限 120px，超出内部滚动）
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`
+  }, [input])
 
   const tasks = currentList(data, tab, date)
   const visible = useMemo(() => filterTasks(tasks, filter), [tasks, filter])
@@ -75,30 +83,17 @@ export default function TodoApp() {
     updateList((list) => list.filter((t) => t.id !== id))
   }
 
-  /* 拖拽排序：拖到目标项上时在可见列表内交换，再合并回完整列表 */
-  const handleDragStart = (id: string) => {
-    dragIdRef.current = id
-    setDraggingId(id)
+  const editTask = (id: string, text: string) => {
+    updateList((list) => list.map((t) => (t.id === id ? { ...t, text } : t)))
   }
 
-  const handleDragEnter = (id: string) => {
-    const fromId = dragIdRef.current
-    if (!fromId || fromId === id) return
-    updateList((list) => {
-      const vis = filterTasks(list, filter)
-      const from = vis.findIndex((t) => t.id === fromId)
-      const to = vis.findIndex((t) => t.id === id)
-      if (from < 0 || to < 0) return list
-      const next = [...vis]
-      const [moved] = next.splice(from, 1)
-      next.splice(to, 0, moved)
-      return commitReorder(list, next)
-    })
-  }
-
-  const handleDragEnd = () => {
-    dragIdRef.current = null
-    setDraggingId(null)
+  /** 点击日期输入框任意位置都弹出日历（showPicker 不支持时静默降级为原生交互） */
+  const openDatePicker = () => {
+    try {
+      dateRef.current?.showPicker()
+    } catch {
+      // 部分浏览器在非用户手势或不支持时抛错，忽略即可
+    }
   }
 
   /* 空状态文案 */
@@ -121,7 +116,7 @@ export default function TodoApp() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-xl px-3 py-4 md:py-6">
+    <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col justify-center px-3 py-4 md:py-6">
       <PageMeta title="鲸鱼待办 · 卡通待办事项小工具" description="卡通蓝色系待办小工具：按日期与长期事项管理任务，支持勾选、拖拽排序与筛选，数据保存在本地浏览器。" />
 
       <main className="app-shell wobble-lg paper-dots doodle-shadow flex flex-col overflow-hidden border-2 border-border">
@@ -154,14 +149,29 @@ export default function TodoApp() {
           </Tabs>
 
           <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-            <Input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value || todayStr())}
-              disabled={tab === 'longterm'}
-              aria-label="选择日期"
-              className="wobble-sm w-44 shrink-0 border-2 border-border bg-card px-2.5 text-sm"
-            />
+            {/* 日期选择：透明原生 input 接收点击（点击任意位置弹日历），上层纯展示避免选中高亮 */}
+            <div className="group relative w-44 shrink-0">
+              <Input
+                ref={dateRef}
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value || todayStr())}
+                onClick={openDatePicker}
+                disabled={tab === 'longterm'}
+                aria-label="选择日期"
+                className="wobble-sm w-full cursor-pointer opacity-0"
+              />
+              <span
+                aria-hidden="true"
+                className={`wobble-sm pointer-events-none absolute inset-0 flex items-center justify-center rounded-md border-2 bg-card px-2.5 text-sm transition-colors ${
+                  tab === 'longterm'
+                    ? 'border-border text-muted-foreground'
+                    : 'border-border text-foreground group-focus-within:border-primary'
+                }`}
+              >
+                {date}
+              </span>
+            </div>
             {tab === 'daily' && !isToday && (
               <Button
                 variant="ghost"
@@ -207,21 +217,27 @@ export default function TodoApp() {
               <p className="text-xs text-muted-foreground">{emptySub}</p>
             </div>
           ) : (
-            <ol className="flex flex-col gap-2.5">
+            <>
+            {/* Reorder 拖拽：拖动时本体实时移动，其余项动画让位；筛选状态下由 commitReorder 把隐藏任务按原位插回 */}
+            <Reorder.Group
+              as="ol"
+              axis="y"
+              values={visible}
+              onReorder={(nextVisible) => updateList((list) => commitReorder(list, nextVisible))}
+              className="flex flex-col gap-2.5"
+            >
               {visible.map((task, i) => (
                 <TaskItem
                   key={task.id}
                   task={task}
                   index={i + 1}
-                  isDragging={draggingId === task.id}
                   onToggle={toggleTask}
                   onDelete={deleteTask}
-                  onDragStart={handleDragStart}
-                  onDragEnter={handleDragEnter}
-                  onDragEnd={handleDragEnd}
+                  onEdit={editTask}
                 />
               ))}
-            </ol>
+            </Reorder.Group>
+            </>
           )}
         </div>
 
@@ -233,14 +249,22 @@ export default function TodoApp() {
           }}
           className="flex shrink-0 items-center gap-2 border-t-2 border-dashed border-border/70 bg-card/80 px-4 py-3"
         >
-          <Input
+          {/* 输入框：回车提交、Shift+回车换行，高度随内容自适应 */}
+          <textarea
             ref={inputRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            rows={1}
             maxLength={200}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                addTask()
+              }
+            }}
             placeholder={tab === 'daily' ? '添加今天的任务…' : '添加长期事项…'}
             aria-label="任务内容"
-            className={`wobble-sm min-w-0 flex-1 border-2 border-border bg-card px-3 text-base ${
+            className={`wobble-sm min-w-0 flex-1 resize-none overflow-y-auto rounded-lg border-2 border-border bg-card px-3 py-2 text-base leading-relaxed outline-none ${
               shake ? 'shake' : ''
             }`}
           />
