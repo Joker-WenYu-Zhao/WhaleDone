@@ -8,14 +8,54 @@ interface TaskItemProps {
   task: Task
   /** 列表中显示的序号（按筛选后的顺序自动生成） */
   index: number
+  /** 所属日期标记（如 08-15）；仅搜索命中其他日期任务时传入，替代序号展示 */
+  dateLabel?: string | null
+  /** 搜索关键词，非空时内容中的命中片段高亮 */
+  highlight?: string
+  /** 搜索生效时禁用拖拽（隐藏把手） */
+  dragDisabled?: boolean
   onToggle: (id: string) => void
   onDelete: (id: string) => void
   onEdit: (id: string, text: string) => void
 }
 
+/** 把文本按关键词切分并高亮命中片段（大小写不敏感） */
+function HighlightedText({ text, keyword }: { text: string; keyword: string }) {
+  const kw = keyword.trim().toLowerCase()
+  if (!kw) return text
+  const parts: { text: string; hit: boolean }[] = []
+  let rest = text
+  while (rest.length > 0) {
+    const idx = rest.toLowerCase().indexOf(kw)
+    if (idx < 0) {
+      parts.push({ text: rest, hit: false })
+      break
+    }
+    if (idx > 0) parts.push({ text: rest.slice(0, idx), hit: false })
+    parts.push({ text: rest.slice(idx, idx + kw.length), hit: true })
+    rest = rest.slice(idx + kw.length)
+  }
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.hit ? (
+          <mark key={i} className="rounded-sm bg-yellow-200 px-0.5 text-foreground">
+            {p.text}
+          </mark>
+        ) : (
+          <span key={i}>{p.text}</span>
+        ),
+      )}
+    </>
+  )
+}
+
 export default function TaskItem({
   task,
   index,
+  dateLabel,
+  highlight,
+  dragDisabled,
   onToggle,
   onDelete,
   onEdit,
@@ -65,10 +105,16 @@ export default function TaskItem({
       whileDrag={{ scale: 1.04, rotate: 1 }}
       className="wobble-sm doodle-shadow-sm relative z-10 flex items-center gap-2 border-2 border-border bg-card px-2.5 py-1.5"
     >
-      {/* 自动编号 */}
-      <span aria-hidden="true" className="w-6 shrink-0 text-center font-hand text-lg leading-none text-primary">
-        {index}.
-      </span>
+      {/* 序号 / 所属日期标记（搜索命中其他日期任务时） */}
+      {dateLabel ? (
+        <span title={`所属日期：${dateLabel}`} className="w-11 shrink-0 text-center font-hand text-xs leading-none text-muted-foreground">
+          {dateLabel}
+        </span>
+      ) : (
+        <span aria-hidden="true" className="w-6 shrink-0 text-center font-hand text-lg leading-none text-primary">
+          {index}.
+        </span>
+      )}
 
       {/* 勾选框 */}
       <Checkbox
@@ -123,25 +169,27 @@ export default function TaskItem({
         </>
       ) : (
         <>
-          {/* 任务内容（完整展示，过长自动换行，保留手动换行） */}
+          {/* 任务内容（完整展示，过长自动换行，保留手动换行；搜索命中片段高亮） */}
           <span
             className={`min-w-0 flex-1 whitespace-pre-wrap break-words text-sm leading-relaxed ${
               task.done ? 'task-done-text text-muted-foreground' : 'text-foreground'
             }`}
           >
-            {task.text}
+            {highlight ? <HighlightedText text={task.text} keyword={highlight} /> : task.text}
           </span>
 
-          {/* 拖拽把手 */}
-          <button
-            type="button"
-            aria-label="拖动调整顺序"
-            title="拖动调整顺序"
-            onPointerDown={(e) => controls.start(e)}
-            className="flex size-10 shrink-0 cursor-grab touch-none items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing"
-          >
-            <GripVertical className="size-5" />
-          </button>
+          {/* 拖拽把手（搜索生效时隐藏，避免跨日期排序错乱） */}
+          {!dragDisabled && (
+            <button
+              type="button"
+              aria-label="拖动调整顺序"
+              title="拖动调整顺序"
+              onPointerDown={(e) => controls.start(e)}
+              className="flex size-10 shrink-0 cursor-grab touch-none items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing"
+            >
+              <GripVertical className="size-5" />
+            </button>
+          )}
 
           {/* 编辑 */}
           <button

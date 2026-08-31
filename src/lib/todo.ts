@@ -74,6 +74,26 @@ export function currentList(data: TodoData, tab: TabKey, date: string): Task[] {
   return tab === 'daily' ? (data.daily[date] ?? []) : data.longterm
 }
 
+/** 带所属日期的任务条目（搜索跨日期收集时使用，date 为 null 表示长期事项） */
+export interface DatedTask {
+  task: Task
+  date: string | null
+}
+
+/** 收集全部每日待办（按日期升序，同日期内保持原始顺序） */
+export function collectAllDaily(data: TodoData): DatedTask[] {
+  return Object.keys(data.daily)
+    .sort()
+    .flatMap((date) => data.daily[date].map((task) => ({ task, date })))
+}
+
+/** 关键词过滤：忽略大小写，仅匹配内容；关键词空白视为不过滤 */
+export function searchDatedTasks(items: DatedTask[], keyword: string): DatedTask[] {
+  const kw = keyword.trim().toLowerCase()
+  if (!kw) return items
+  return items.filter(({ task }) => task.text.toLowerCase().includes(kw))
+}
+
 export function filterTasks(tasks: Task[], filter: FilterKey): Task[] {
   if (filter === 'pending') return tasks.filter((t) => !t.done)
   if (filter === 'done') return tasks.filter((t) => t.done)

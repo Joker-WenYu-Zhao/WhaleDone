@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Reorder } from 'motion/react'
-import { Plus } from 'lucide-react'
+import { Download, Plus, Upload, X } from 'lucide-react'
+import { toast } from 'sonner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -10,14 +21,23 @@ import TaskItem from './TaskItem'
 import {
   FILTERS,
   commitReorder,
+  collectAllDaily,
   createTask,
   currentList,
   filterTasks,
   loadData,
   saveData,
+  searchDatedTasks,
   todayStr,
 } from '@/lib/todo'
-import type { FilterKey, TabKey, Task, TodoData } from '@/lib/todo'
+import type { DatedTask, FilterKey, TabKey, Task, TodoData } from '@/lib/todo'
+import {
+  buildBackupFilename,
+  csvToTodo,
+  downloadTextFile,
+  parseCsv,
+  todoToCsv,
+} from '@/lib/backup'
 
 export default function TodoApp() {
   const [data, setData] = useState<TodoData>(loadData)
@@ -26,8 +46,15 @@ export default function TodoApp() {
   const [filter, setFilter] = useState<FilterKey>('all')
   const [input, setInput] = useState('')
   const [shake, setShake] = useState(false)
+  // 搜索：输入值（打字不过滤）与已提交关键词（回车才生效）分离
+  const [searchInput, setSearchInput] = useState('')
+  const [searchKeyword, setSearchKeyword] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const dateRef = useRef<HTMLInputElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  // 导入：校验通过的待导入数据，非 null 时弹二次确认框
+  const [pendingImport, setPendingImport] = useState<TodoData | null>(null)
 
   // 任何数据变化都实时保存
   useEffect(() => {
@@ -43,9 +70,33 @@ export default function TodoApp() {
   }, [input])
 
   const tasks = currentList(data, tab, date)
-  const visible = useMemo(() => filterTasks(tasks, filter), [tasks, filter])
   const doneCount = tasks.filter((t) => t.done).length
   const isToday = date === todayStr()
+  const isSearchMode = searchKeyword.trim() !== ''
+
+  /** 列表渲染项：非搜索模式为当前日期列表（应用状态筛选）；搜索模式为全 Tab 范围内的命中结果 */
+  const listItems = useMemo<DatedTask[]>(() => {
+    if (!isSearchMode) return filterTasks(tasks, filter).map((task) => ({ task, date: null }))
+    const source =
+      tab === 'daily'
+        ? collectAllDaily(data)
+        : data.longterm.map((task) => ({ task, date: null as string | null }))
+    const matched = searchDatedTasks(source, searchKeyword)
+    if (filter === 'pending') return matched.filter(({ task }) => !task.done)
+    if (filter === 'done') return matched.filter(({ task }) => task.done)
+    return matched
+  }, [isSearchMode, tasks, tab, data, searchKeyword, filter])
+
+  /** 清空搜索：恢复按当前 Tab + 状态筛选的正常查询，不抢焦点 */
+  const resetSearch = () => {
+    setSearchInput('')
+    setSearchKeyword('')
+  }
+
+  /** 回车提交搜索：把输入框当前值作为生效关键词 */
+  const submitSearch = () => {
+    setSearchKeyword(searchInput)
+  }
 
   /** 更新当前 Tab 对应的列表（待办按日期、长期为独立列表） */
   const updateList = (updater: (list: Task[]) => Task[]) => {
@@ -76,15 +127,56 @@ export default function TodoApp() {
   }
 
   const toggleTask = (id: string) => {
+    if (isSearchMode) {
+      mutateTaskById(id, (t) => ({ ...t, done: !t.done }))
+      return
+    }
     updateList((list) => list.map((t) => (t.id === id ? { ...t, done: !t.done } : t)))
   }
 
   const deleteTask = (id: string) => {
+    if (isSearchMode) {
+      removeTaskById(id)
+      return
+    }
     updateList((list) => list.filter((t) => t.id !== id))
   }
 
   const editTask = (id: string, text: string) => {
+    if (isSearchMode) {
+      mutateTaskById(id, (t) => ({ ...t, text }))
+      return
+    }
     updateList((list) => list.map((t) => (t.id === id ? { ...t, text } : t)))
+  }
+
+  /** 按 id 在全量数据中修改任务（搜索模式下命中项可能来自其他日期） */
+  const mutateTaskById = (id: string, mutate: (t: Task) => Task) => {
+    setData((prev) => {
+      for (const key of Object.keys(prev.daily)) {
+        if (prev.daily[key].some((t) => t.id === id)) {
+          return {
+            ...prev,
+            daily: { ...prev.daily, [key]: prev.daily[key].map((t) => (t.id === id ? mutate(t) : t)) },
+          }
+        }
+      }
+      return { ...prev, longterm: prev.longterm.map((t) => (t.id === id ? mutate(t) : t)) }
+    })
+  }
+
+  /** 按 id 在全量数据中删除任务 */
+  const removeTaskById = (id: string) => {
+    setData((prev) => {
+      const daily = { ...prev.daily }
+      for (const key of Object.keys(daily)) {
+        if (daily[key].some((t) => t.id === id)) {
+          daily[key] = daily[key].filter((t) => t.id !== id)
+          return { ...prev, daily }
+        }
+      }
+      return { ...prev, longterm: prev.longterm.filter((t) => t.id !== id) }
+    })
   }
 
   /** 点击日期输入框任意位置都弹出日历（showPicker 不支持时静默降级为原生交互） */
@@ -96,10 +188,58 @@ export default function TodoApp() {
     }
   }
 
-  /* 空状态文案 */
+  /** 导出：内存数据转 CSV 下载（无破坏性，空数据仍导出仅表头文件） */
+  const handleExport = () => {
+    downloadTextFile(buildBackupFilename('鲸鱼待办备份'), todoToCsv(data))
+    const hasData = Object.keys(data.daily).length > 0 || data.longterm.length > 0
+    if (hasData) {
+      toast.success('导出成功，文件已保存到下载目录')
+    } else {
+      toast.info('当前没有数据，已导出仅含表头的空文件')
+    }
+  }
+
+  /** 导入：选文件 → 解析校验 → 全部通过后自动备份现有数据 → 弹二次确认 */
+  const handleImportFile = (file: File) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const imported = csvToTodo(parseCsv(String(reader.result)))
+        // 解析与校验全部通过才备份现有数据（解析阶段失败时现有数据零风险）
+        downloadTextFile(buildBackupFilename('待办事项备份数据'), todoToCsv(data))
+        setPendingImport(imported)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : '文件内容无法识别，请检查是否为本工具导出的 CSV')
+      }
+    }
+    reader.onerror = () => toast.error('文件读取失败，请重试')
+    reader.readAsText(file, 'utf-8')
+  }
+
+  /** 确认导入：覆盖写入（localStorage 由现有 useEffect 自动同步） */
+  const confirmImport = () => {
+    if (!pendingImport) return
+    const count =
+      Object.values(pendingImport.daily).reduce((n, list) => n + list.length, 0) +
+      pendingImport.longterm.length
+    setData(pendingImport)
+    setPendingImport(null)
+    toast.success(`导入成功，共 ${count} 条事项`)
+  }
+
+  /** 待导入数据条数（确认弹窗文案用） */
+  const pendingImportCount = pendingImport
+    ? Object.values(pendingImport.daily).reduce((n, list) => n + list.length, 0) +
+      pendingImport.longterm.length
+    : 0
+
+  /* 空状态文案：搜索无命中时显示专属提示 */
   let emptyMain = ''
   let emptySub = ''
-  if (tasks.length === 0) {
+  if (isSearchMode && listItems.length === 0) {
+    emptyMain = '没有找到相关事项'
+    emptySub = '换个关键词试试吧'
+  } else if (tasks.length === 0) {
     if (tab === 'daily') {
       emptyMain = '这一天还是一片平静的海面'
       emptySub = '在下面写下第一条任务吧'
@@ -149,13 +289,49 @@ export default function TodoApp() {
           </Tabs>
 
           <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+            {/* 导入/导出：位于日期选择控件左侧 */}
+            <button
+              type="button"
+              onClick={handleExport}
+              title="导出数据"
+              aria-label="导出数据"
+              className="wobble-sm flex size-8 shrink-0 items-center justify-center rounded-md border-2 border-border bg-card text-primary transition-transform hover:bg-muted active:translate-y-0.5"
+            >
+              <Download className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              title="导入数据"
+              aria-label="导入数据"
+              className="wobble-sm flex size-8 shrink-0 items-center justify-center rounded-md border-2 border-border bg-card text-accent transition-transform hover:bg-muted active:translate-y-0.5"
+            >
+              <Upload className="size-4" />
+            </button>
+            {/* 隐藏的文件选择框：只接受 .csv，读取后重置 value 以支持重复选择同一文件 */}
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) handleImportFile(file)
+                e.target.value = ''
+              }}
+            />
+
             {/* 日期选择：透明原生 input 接收点击（点击任意位置弹日历），上层纯展示避免选中高亮 */}
             <div className="group relative w-44 shrink-0">
               <Input
                 ref={dateRef}
                 type="date"
                 value={date}
-                onChange={(e) => setDate(e.target.value || todayStr())}
+                onChange={(e) => {
+                  setDate(e.target.value || todayStr())
+                  // 切换日期自动清空搜索状态
+                  resetSearch()
+                }}
                 onClick={openDatePicker}
                 disabled={tab === 'longterm'}
                 aria-label="选择日期"
@@ -184,7 +360,7 @@ export default function TodoApp() {
           </div>
         </div>
 
-        {/* 筛选器 */}
+          {/* 筛选器 + 搜索框 */}
         <div className="flex items-center gap-1.5 px-4 pb-3">
           {FILTERS.map((f) => (
             <button
@@ -201,16 +377,46 @@ export default function TodoApp() {
               {f.label}
             </button>
           ))}
-          {tasks.length > 0 && (
-            <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+          {!isSearchMode && tasks.length > 0 && (
+            <span className="shrink-0 text-xs text-muted-foreground">
               {doneCount}/{tasks.length} 完成
             </span>
           )}
+          {isSearchMode && (
+            <span className="shrink-0 text-xs text-muted-foreground">找到 {listItems.length} 项</span>
+          )}
+
+          {/* 搜索框：回车触发查询，× 清空并自动查询一次（恢复全部） */}
+          <div className="relative ml-auto w-36 shrink-0">
+            <Input
+              ref={searchRef}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submitSearch()
+              }}
+              placeholder="搜索事项…"
+              aria-label="搜索事项"
+              maxLength={50}
+              className="wobble-sm h-8 w-full border-2 border-border bg-card pr-8 text-xs"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                aria-label="清空搜索"
+                title="清空搜索"
+                onClick={() => resetSearch()}
+                className="absolute right-1.5 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* 任务列表（固定窗口内滚动） */}
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
-          {visible.length === 0 ? (
+          {listItems.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-8 text-center">
               <WhaleMark className="w-28 -rotate-2 opacity-90" />
               <p className="font-hand text-xl text-foreground">{emptyMain}</p>
@@ -222,15 +428,18 @@ export default function TodoApp() {
             <Reorder.Group
               as="ol"
               axis="y"
-              values={visible}
+              values={listItems.map((item) => item.task)}
               onReorder={(nextVisible) => updateList((list) => commitReorder(list, nextVisible))}
               className="flex flex-col gap-2.5"
             >
-              {visible.map((task, i) => (
+              {listItems.map((item, i) => (
                 <TaskItem
-                  key={task.id}
-                  task={task}
+                  key={item.task.id}
+                  task={item.task}
                   index={i + 1}
+                  dateLabel={item.date && item.date !== date ? item.date.slice(5) : null}
+                  highlight={isSearchMode ? searchKeyword : undefined}
+                  dragDisabled={isSearchMode}
                   onToggle={toggleTask}
                   onDelete={deleteTask}
                   onEdit={editTask}
@@ -273,6 +482,27 @@ export default function TodoApp() {
             添加
           </Button>
         </form>
+
+        {/* 导入二次确认弹窗（受控：open 由 pendingImport 驱动） */}
+        <AlertDialog
+          open={pendingImport !== null}
+          onOpenChange={(open) => {
+            if (!open) setPendingImport(null)
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>确认导入并覆盖现有数据？</AlertDialogTitle>
+              <AlertDialogDescription>
+                将清空本地全部数据并导入文件中的 {pendingImportCount} 条事项；原数据已自动备份到下载目录。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>取消</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmImport}>确认导入</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
     </div>
   )
