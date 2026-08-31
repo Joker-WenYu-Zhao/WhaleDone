@@ -71,13 +71,32 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 npm install
 ```
 
+### 快捷启动（PowerShell 命令 whale，推荐）
+
+已在本机 PowerShell 配置（`C:\Users\admin\Documents\WindowsPowerShell\profile.ps1`）中注册了 `whale` 函数，新开终端直接输入：
+
+```powershell
+whale
+```
+
+等价于「进入项目目录 + 启动开发服务器」，无需再手动 cd 或绕执行策略。
+
+> 首次配置的完整步骤（其它机器参考）：执行策略改为 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force`（一次性，允许本地脚本运行）；然后在上述 profile.ps1 里添加：
+>
+> ```powershell
+> function whale {
+>     Set-Location "<项目目录>"
+>     npm run dev
+> }
+> ```
+
 ### 启动开发服务器
 
 ```bash
 npm run dev
 ```
 
-启动后访问 `http://localhost:5173/` 即可预览。
+启动后访问 `http://localhost:5173/WhaleDone/` 即可预览（已配置 base 路径）。
 
 ### 代码检查
 
