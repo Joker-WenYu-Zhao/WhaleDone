@@ -1,10 +1,12 @@
 /* 鲸鱼待办 · 导入导出（CSV 备份/恢复，纯函数，零第三方依赖） */
 
-import { collectAllDaily, createTask, emptyData, todayStr } from './todo'
+import { collectAllDaily, createTask, emptyData, normalizeTags, taskTags, todayStr } from './todo'
 import type { TodoData } from './todo'
 
-/* CSV 契约常量（见《导入导出-前端设计文档.md》3.2 字段级对照表） */
-export const CSV_HEADER = '类型,日期,内容,状态'
+/* CSV 契约常量（见《任务标签-前端设计文档.md》9.2 字段级对照表：类型,日期,内容,状态,标签） */
+export const CSV_HEADER = '类型,日期,内容,状态,标签'
+/** 旧版 4 列表头（无标签列，导入时兼容） */
+export const CSV_HEADER_LEGACY = '类型,日期,内容,状态'
 export const TYPE_DAILY = '每日待办'
 export const TYPE_LONGTERM = '长期事项'
 export const STATUS_DONE = '已完成'
@@ -27,12 +29,16 @@ export function todoToCsv(data: TodoData): string {
   const statusOf = (done: boolean) => (done ? STATUS_DONE : STATUS_PENDING)
   for (const { task, date } of collectAllDaily(data)) {
     lines.push(
-      [TYPE_DAILY, date ?? '', task.text, statusOf(task.done)].map(escapeCsvField).join(','),
+      [TYPE_DAILY, date ?? '', task.text, statusOf(task.done), taskTags(task).join('|')]
+        .map(escapeCsvField)
+        .join(','),
     )
   }
   for (const task of data.longterm) {
     lines.push(
-      [TYPE_LONGTERM, '', task.text, statusOf(task.done)].map(escapeCsvField).join(','),
+      [TYPE_LONGTERM, '', task.text, statusOf(task.done), taskTags(task).join('|')]
+        .map(escapeCsvField)
+        .join(','),
     )
   }
   return `\uFEFF${lines.join('\r\n')}\r\n`
@@ -90,8 +96,9 @@ function isValidDate(value: string): boolean {
 }
 
 /**
- * CSV 二维表 → TodoData（含全部校验，任一行非法即抛 CsvParseError 并指出行号）：
- * - 首行必须为表头；空行跳过；0 条有效数据视为空文件
+ * CSV 二维表 → TodoData 导入（含全部校验，任一行非法即抛 CsvParseError 并指出行号）：
+ * - 表头兼容新旧双格式：5 列新格式（含标签列）或 4 列旧格式均可；空行跳过；0 条有效数据视为空文件
+ * - 数据行 4 列 = 无标签，5 列解析标签（| 分隔后逐个规范化）；≥6 列报错
  * - 类型只允许 每日待办/长期事项；每日待办日期必填且合法，长期事项日期必须留空
  * - 状态只允许 已完成/待办，缺省视为待办；内容去空白后必填，超 200 字符截断
  * - Task.id 一律重新生成，不复用文件中的旧 id
@@ -99,8 +106,9 @@ function isValidDate(value: string): boolean {
 export function csvToTodo(rows: string[][]): TodoData {
   if (rows.length === 0) throw new CsvParseError('文件是空的')
   const header = rows[0].map((c) => c.trim()).join(',')
-  if (header !== CSV_HEADER) {
-    throw new CsvParseError('表头不正确，应为「类型,日期,内容,状态」')
+  const isLegacyHeader = header === CSV_HEADER_LEGACY
+  if (header !== CSV_HEADER && !isLegacyHeader) {
+    throw new CsvParseError('表头不正确，应为「类型,日期,内容,状态,标签」')
   }
 
   const data = emptyData()
@@ -109,10 +117,15 @@ export function csvToTodo(rows: string[][]): TodoData {
     const row = rows[i]
     if (row.every((c) => c.trim() === '')) continue
     const lineNo = i + 1
-    if (row.length !== 4) {
-      throw new CsvParseError(`第 ${lineNo} 行列数不对，应为 4 列（类型,日期,内容,状态）`)
+    if (row.length !== 4 && row.length !== 5) {
+      throw new CsvParseError(`第 ${lineNo} 行列数不对，应为 4 列或 5 列（类型,日期,内容,状态[,标签]）`)
+    }
+    if (isLegacyHeader && row.length !== 4) {
+      throw new CsvParseError(`第 ${lineNo} 行列数不对，旧格式应为 4 列（类型,日期,内容,状态）`)
     }
     const [type, dateField, textField, statusField] = row.map((c) => c.trim())
+    // 第 5 列标签：| 分隔多标签，逐个规范化（非法标签静默规范化，不报错终止）
+    const tags = normalizeTags((row[4] ?? '').split('|'))
 
     let done: boolean
     if (statusField === '' || statusField === STATUS_PENDING) {
@@ -131,13 +144,13 @@ export function csvToTodo(rows: string[][]): TodoData {
         throw new CsvParseError(`第 ${lineNo} 行日期不合法：「${dateField || '（空）'}」，应为 YYYY-MM-DD`)
       }
       const list = data.daily[dateField] ?? []
-      list.push({ ...createTask(text), done })
+      list.push({ ...createTask(text), done, ...(tags.length > 0 ? { tags } : {}) })
       data.daily[dateField] = list
     } else if (type === TYPE_LONGTERM) {
       if (dateField) {
         throw new CsvParseError(`第 ${lineNo} 行为长期事项，日期必须留空`)
       }
-      data.longterm.push({ ...createTask(text), done })
+      data.longterm.push({ ...createTask(text), done, ...(tags.length > 0 ? { tags } : {}) })
     } else {
       throw new CsvParseError(`第 ${lineNo} 行类型值不合法：「${type || '（空）'}」，只允许「每日待办」或「长期事项」`)
     }

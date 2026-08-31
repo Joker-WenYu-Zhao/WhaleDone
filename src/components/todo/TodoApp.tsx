@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Reorder } from 'motion/react'
-import { Download, Plus, Upload, X } from 'lucide-react'
+import { Download, Plus, Tag, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   AlertDialog,
@@ -20,14 +20,19 @@ import WhaleMark from './WhaleMark'
 import TaskItem from './TaskItem'
 import {
   FILTERS,
+  PRESET_TAGS,
   commitReorder,
   collectAllDaily,
+  collectAllTags,
   createTask,
   currentList,
+  filterByTag,
   filterTasks,
   loadData,
+  normalizeTags,
   saveData,
   searchDatedTasks,
+  tagColor,
   todayStr,
 } from '@/lib/todo'
 import type { DatedTask, FilterKey, TabKey, Task, TodoData } from '@/lib/todo'
@@ -38,6 +43,7 @@ import {
   parseCsv,
   todoToCsv,
 } from '@/lib/backup'
+import TagPicker from './TagPicker'
 
 export default function TodoApp() {
   const [data, setData] = useState<TodoData>(loadData)
@@ -55,6 +61,9 @@ export default function TodoApp() {
   const fileRef = useRef<HTMLInputElement>(null)
   // 导入：校验通过的待导入数据，非 null 时弹二次确认框
   const [pendingImport, setPendingImport] = useState<TodoData | null>(null)
+  // 标签：筛选条选中项（null = 不过滤）与添加栏草稿标签
+  const [activeTag, setActiveTag] = useState<string | null>(null)
+  const [draftTags, setDraftTags] = useState<string[]>([])
 
   // 任何数据变化都实时保存
   useEffect(() => {
@@ -74,18 +83,36 @@ export default function TodoApp() {
   const isToday = date === todayStr()
   const isSearchMode = searchKeyword.trim() !== ''
 
-  /** 列表渲染项：非搜索模式为当前日期列表（应用状态筛选）；搜索模式为全 Tab 范围内的命中结果 */
+  /** 全库已使用的标签（筛选条数据源）与候选标签（预置 ∪ 全库，选择器数据源） */
+  const usedTags = useMemo(() => collectAllTags(data), [data])
+  const tagCandidates = useMemo(
+    () => [...new Set([...PRESET_TAGS, ...usedTags.map(({ name }) => name)])],
+    [usedTags],
+  )
+
+  /**
+   * 列表渲染项：关键词 / 状态 / 标签三层条件取交集。
+   * 非搜索模式数据源为当前日期列表；搜索模式为全 Tab 范围内的命中结果。
+   */
   const listItems = useMemo<DatedTask[]>(() => {
-    if (!isSearchMode) return filterTasks(tasks, filter).map((task) => ({ task, date: null }))
-    const source =
-      tab === 'daily'
-        ? collectAllDaily(data)
-        : data.longterm.map((task) => ({ task, date: null as string | null }))
-    const matched = searchDatedTasks(source, searchKeyword)
-    if (filter === 'pending') return matched.filter(({ task }) => !task.done)
-    if (filter === 'done') return matched.filter(({ task }) => task.done)
-    return matched
-  }, [isSearchMode, tasks, tab, data, searchKeyword, filter])
+    let source: DatedTask[]
+    if (isSearchMode) {
+      const all =
+        tab === 'daily'
+          ? collectAllDaily(data)
+          : data.longterm.map((task) => ({ task, date: null as string | null }))
+      source = searchDatedTasks(all, searchKeyword)
+    } else {
+      source = tasks.map((task) => ({ task, date: null }))
+    }
+    const filtered =
+      filter === 'pending'
+        ? source.filter(({ task }) => !task.done)
+        : filter === 'done'
+          ? source.filter(({ task }) => task.done)
+          : source
+    return filterByTag(filtered, activeTag)
+  }, [isSearchMode, tasks, tab, data, searchKeyword, filter, activeTag])
 
   /** 清空搜索：恢复按当前 Tab + 状态筛选的正常查询，不抢焦点 */
   const resetSearch = () => {
@@ -121,8 +148,12 @@ export default function TodoApp() {
       triggerShake()
       return
     }
-    updateList((list) => [...list, createTask(text)])
+    updateList((list) => [
+      ...list,
+      { ...createTask(text), ...(draftTags.length > 0 ? { tags: draftTags } : {}) },
+    ])
     setInput('')
+    setDraftTags([])
     inputRef.current?.focus()
   }
 
@@ -142,12 +173,18 @@ export default function TodoApp() {
     updateList((list) => list.filter((t) => t.id !== id))
   }
 
-  const editTask = (id: string, text: string) => {
+  /** 编辑保存：tags 可选，undefined 保持原标签，数组（含空）覆盖（normalizeTags 负责规范化） */
+  const editTask = (id: string, text: string, tags?: string[]) => {
+    const applyTags = (t: Task): Task => ({
+      ...t,
+      text,
+      ...(tags === undefined ? {} : { tags: normalizeTags(tags) }),
+    })
     if (isSearchMode) {
-      mutateTaskById(id, (t) => ({ ...t, text }))
+      mutateTaskById(id, applyTags)
       return
     }
-    updateList((list) => list.map((t) => (t.id === id ? { ...t, text } : t)))
+    updateList((list) => list.map((t) => (t.id === id ? applyTags(t) : t)))
   }
 
   /** 按 id 在全量数据中修改任务（搜索模式下命中项可能来自其他日期） */
@@ -239,6 +276,9 @@ export default function TodoApp() {
   if (isSearchMode && listItems.length === 0) {
     emptyMain = '没有找到相关事项'
     emptySub = '换个关键词试试吧'
+  } else if (activeTag && listItems.length === 0) {
+    emptyMain = '这个标签下还没有事项'
+    emptySub = '换个标签或清掉筛选试试'
   } else if (tasks.length === 0) {
     if (tab === 'daily') {
       emptyMain = '这一天还是一片平静的海面'
@@ -414,6 +454,30 @@ export default function TodoApp() {
           </div>
         </div>
 
+        {/* 标签筛选条：仅当全库存在已使用标签时显示；单选可取消，不选 = 显示全部 */}
+        {usedTags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 px-4 pb-3">
+            <span className="shrink-0 text-xs text-muted-foreground">标签</span>
+            {usedTags.map(({ name, count }) => (
+              <button
+                key={name}
+                type="button"
+                aria-pressed={activeTag === name}
+                title={`筛选标签「${name}」，再点一次取消`}
+                onClick={() => setActiveTag(activeTag === name ? null : name)}
+                className={`wobble-sm rounded-full border px-2.5 py-1 text-xs font-medium transition-transform active:translate-y-0.5 ${tagColor(name)} ${
+                  activeTag === name
+                    ? 'font-semibold ring-2 ring-primary/40'
+                    : 'opacity-75 hover:opacity-100'
+                }`}
+              >
+                {name}
+                <span className="ml-1 opacity-60">{count}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* 任务列表（固定窗口内滚动） */}
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
           {listItems.length === 0 ? (
@@ -440,6 +504,7 @@ export default function TodoApp() {
                   dateLabel={item.date && item.date !== date ? item.date.slice(5) : null}
                   highlight={isSearchMode ? searchKeyword : undefined}
                   dragDisabled={isSearchMode}
+                  tagCandidates={tagCandidates}
                   onToggle={toggleTask}
                   onDelete={deleteTask}
                   onEdit={editTask}
@@ -456,31 +521,70 @@ export default function TodoApp() {
             e.preventDefault()
             addTask()
           }}
-          className="flex shrink-0 items-center gap-2 border-t-2 border-dashed border-border/70 bg-card/80 px-4 py-3"
+          className="flex shrink-0 flex-col gap-1.5 border-t-2 border-dashed border-border/70 bg-card/80 px-4 py-3"
         >
-          {/* 输入框：回车提交、Shift+回车换行，高度随内容自适应 */}
-          <textarea
-            ref={inputRef}
-            value={input}
-            rows={1}
-            maxLength={200}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                addTask()
-              }
-            }}
-            placeholder={tab === 'daily' ? '添加今天的任务…' : '添加长期事项…'}
-            aria-label="任务内容"
-            className={`wobble-sm min-w-0 flex-1 resize-none overflow-y-auto rounded-lg border-2 border-border bg-card px-3 py-2 text-base leading-relaxed outline-none ${
-              shake ? 'shake' : ''
-            }`}
-          />
-          <Button type="submit" className="wobble doodle-shadow press shrink-0 gap-1">
-            <Plus className="size-4" />
-            添加
-          </Button>
+          {/* 待添加任务的已选标签（可点 × 移除），随任务一并保存 */}
+          {draftTags.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1">
+              {draftTags.map((tag) => (
+                <span
+                  key={tag}
+                  className={`flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] leading-none ${tagColor(tag)}`}
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    aria-label={`移除标签 ${tag}`}
+                    title={`移除标签 ${tag}`}
+                    onClick={() => setDraftTags(draftTags.filter((t) => t !== tag))}
+                    className="rounded-full p-0.5 hover:bg-black/10"
+                  >
+                    <X className="size-2.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            {/* 输入框：回车提交、Shift+回车换行，高度随内容自适应 */}
+            <textarea
+              ref={inputRef}
+              value={input}
+              rows={1}
+              maxLength={200}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  addTask()
+                }
+              }}
+              placeholder={tab === 'daily' ? '添加今天的任务…' : '添加长期事项…'}
+              aria-label="任务内容"
+              className={`wobble-sm min-w-0 flex-1 resize-none overflow-y-auto rounded-lg border-2 border-border bg-card px-3 py-2 text-base leading-relaxed outline-none ${
+                shake ? 'shake' : ''
+              }`}
+            />
+            {/* 标签选择器：为待添加任务选标签 */}
+            <TagPicker selected={draftTags} candidates={tagCandidates} onChange={setDraftTags}>
+              <button
+                type="button"
+                aria-label="选择标签"
+                title="选择标签"
+                className={`wobble-sm flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                  draftTags.length > 0
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-primary'
+                }`}
+              >
+                <Tag className="size-5" />
+              </button>
+            </TagPicker>
+            <Button type="submit" className="wobble doodle-shadow press shrink-0 gap-1">
+              <Plus className="size-4" />
+              添加
+            </Button>
+          </div>
         </form>
 
         {/* 导入二次确认弹窗（受控：open 由 pendingImport 驱动） */}

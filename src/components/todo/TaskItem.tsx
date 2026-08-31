@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Reorder, useDragControls } from 'motion/react'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Check, GripVertical, Pencil, Trash2, X } from 'lucide-react'
+import { Check, GripVertical, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { tagColor, taskTags } from '@/lib/todo'
 import type { Task } from '@/lib/todo'
+import TagPicker from './TagPicker'
 
 interface TaskItemProps {
   task: Task
@@ -14,9 +16,12 @@ interface TaskItemProps {
   highlight?: string
   /** 搜索生效时禁用拖拽（隐藏把手） */
   dragDisabled?: boolean
+  /** 标签候选（预置 ∪ 全库已有，编辑态选择器用） */
+  tagCandidates: string[]
   onToggle: (id: string) => void
   onDelete: (id: string) => void
-  onEdit: (id: string, text: string) => void
+  /** tags 可选：undefined 保持原标签不变，数组（含空）覆盖 */
+  onEdit: (id: string, text: string, tags?: string[]) => void
 }
 
 /** 把文本按关键词切分并高亮命中片段（大小写不敏感） */
@@ -56,25 +61,29 @@ export default function TaskItem({
   dateLabel,
   highlight,
   dragDisabled,
+  tagCandidates,
   onToggle,
   onDelete,
   onEdit,
 }: TaskItemProps) {
   // Reorder 拖拽控制器：只有按住把手才启动拖动，不影响勾选和文本选择
   const controls = useDragControls()
-  // 行内编辑状态：进入编辑时把当前文本拷贝到草稿，保存才写回
+  // 行内编辑状态：进入编辑时把当前文本与标签拷贝到草稿，保存才写回
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const [draftTags, setDraftTags] = useState<string[]>([])
   const editRef = useRef<HTMLTextAreaElement>(null)
 
   const startEdit = () => {
     setDraft(task.text)
+    setDraftTags(taskTags(task))
     setEditing(true)
   }
 
   const cancelEdit = () => {
     setEditing(false)
     setDraft('')
+    setDraftTags([])
   }
 
   const saveEdit = () => {
@@ -84,9 +93,10 @@ export default function TaskItem({
       editRef.current?.focus()
       return
     }
-    onEdit(task.id, text)
+    onEdit(task.id, text, draftTags)
     setEditing(false)
     setDraft('')
+    setDraftTags([])
   }
 
   // 编辑框高度随内容自适应（上限 120px，超出内部滚动）
@@ -126,24 +136,55 @@ export default function TaskItem({
 
       {editing ? (
         <>
-          {/* 编辑中的输入框：回车保存、Shift+回车换行、Esc 取消 */}
-          <textarea
-            ref={editRef}
-            value={draft}
-            autoFocus
-            rows={1}
-            maxLength={200}
-            aria-label="编辑任务内容"
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                saveEdit()
-              }
-              if (e.key === 'Escape') cancelEdit()
-            }}
-            className="wobble-sm min-w-0 flex-1 resize-none overflow-y-auto rounded-lg border-2 border-primary bg-card px-2 py-1 text-sm leading-relaxed text-foreground outline-none"
-          />
+          {/* 编辑区：内容输入框 + 当前标签行（可移除 / 通过 TagPicker 新增） */}
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <textarea
+              ref={editRef}
+              value={draft}
+              autoFocus
+              rows={1}
+              maxLength={200}
+              aria-label="编辑任务内容"
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  saveEdit()
+                }
+                if (e.key === 'Escape') cancelEdit()
+              }}
+              className="wobble-sm w-full resize-none overflow-y-auto rounded-lg border-2 border-primary bg-card px-2 py-1 text-sm leading-relaxed text-foreground outline-none"
+            />
+            <div className="flex flex-wrap items-center gap-1">
+              {draftTags.map((tag) => (
+                <span
+                  key={tag}
+                  className={`flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] leading-none ${tagColor(tag)}`}
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    aria-label={`移除标签 ${tag}`}
+                    title={`移除标签 ${tag}`}
+                    onClick={() => setDraftTags(draftTags.filter((t) => t !== tag))}
+                    className="rounded-full p-0.5 hover:bg-black/10"
+                  >
+                    <X className="size-2.5" />
+                  </button>
+                </span>
+              ))}
+              <TagPicker selected={draftTags} candidates={tagCandidates} onChange={setDraftTags}>
+                <button
+                  type="button"
+                  aria-label="添加标签"
+                  title="添加标签"
+                  className="flex size-5 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground hover:border-primary hover:text-primary"
+                >
+                  <Plus className="size-3" />
+                </button>
+              </TagPicker>
+            </div>
+          </div>
 
           {/* 取消编辑 */}
           <button
@@ -169,14 +210,28 @@ export default function TaskItem({
         </>
       ) : (
         <>
-          {/* 任务内容（完整展示，过长自动换行，保留手动换行；搜索命中片段高亮） */}
-          <span
-            className={`min-w-0 flex-1 whitespace-pre-wrap break-words text-sm leading-relaxed ${
-              task.done ? 'task-done-text text-muted-foreground' : 'text-foreground'
-            }`}
-          >
-            {highlight ? <HighlightedText text={task.text} keyword={highlight} /> : task.text}
-          </span>
+          {/* 任务内容（完整展示，过长自动换行，保留手动换行；搜索命中片段高亮）+ 标签徽章 */}
+          <div className="min-w-0 flex-1">
+            <span
+              className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${
+                task.done ? 'task-done-text text-muted-foreground' : 'text-foreground'
+              }`}
+            >
+              {highlight ? <HighlightedText text={task.text} keyword={highlight} /> : task.text}
+            </span>
+            {taskTags(task).length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {taskTags(task).map((tag) => (
+                  <span
+                    key={tag}
+                    className={`rounded-full border px-1.5 py-0.5 text-[10px] leading-none ${tagColor(tag)}`}
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* 拖拽把手（搜索生效时隐藏，避免跨日期排序错乱） */}
           {!dragDisabled && (
