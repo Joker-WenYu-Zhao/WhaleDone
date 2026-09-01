@@ -136,14 +136,14 @@ export const TAG_MAX = 3
 /** 单个标签名称长度上限 */
 export const TAG_NAME_MAX = 10
 
-/** 卡通色板：按标签名哈希取色的 Tailwind 类组合（徽章与筛选 chips 共用） */
+/** 卡通色板：按标签名哈希取色的 Tailwind 类组合（徽章与筛选 chips 共用；含暗色变体） */
 export const TAG_COLORS = [
   'bg-primary/15 text-primary border-primary/40',
   'bg-accent/15 text-accent border-accent/40',
-  'bg-emerald-100 text-emerald-700 border-emerald-300',
-  'bg-purple-100 text-purple-700 border-purple-300',
-  'bg-pink-100 text-pink-700 border-pink-300',
-  'bg-amber-100 text-amber-700 border-amber-300',
+  'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700',
+  'bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-700',
+  'bg-pink-100 text-pink-700 border-pink-300 dark:bg-pink-950/60 dark:text-pink-300 dark:border-pink-700',
+  'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700',
 ]
 
 /** 标签规范化：trim → 截断 → 去空 → 去重 → 截断至 TAG_MAX */

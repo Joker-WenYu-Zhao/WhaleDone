@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import IntersectObserver from '@/components/common/IntersectObserver';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -10,7 +10,9 @@ import { routes } from './routes';
 
 const App: React.FC = () => {
   return (
-    <Router>
+    // basename 取自 vite base（构建时为 /WhaleDone/）：
+    // 否则 GitHub Pages 子路径访问时 /WhaleDone/ 匹配不上路由，被下方 * 兜底重定向到根域名
+    <Router basename={import.meta.env.BASE_URL}>
       {/*<AuthProvider>*/}
       {/*<RouteGuard>*/}
       <IntersectObserver />

@@ -65,6 +65,9 @@
     --sidebar-accent-foreground: 211 40% 23%;
     --sidebar-border: 209 39% 34%;
     --sidebar-ring: 212 59% 43%;
+    /* 背景图上层薄纱透明度（浅色）：保证内容可读同时透出鲸鱼照片 */
+    --bg-veil-a: 0.55;
+    --bg-veil-b: 0.65;
   }
 
   /* 海洋夜色（暗色主题备用） */
@@ -89,6 +92,9 @@
     --input: 209 34% 40%;
     --ring: 204 68% 74%;
     --shadow-ink: 210 40% 8%;
+    /* 背景图上层薄纱透明度（暗色）：加深夜海色调，照片仅隐约可见 */
+    --bg-veil-a: 0.82;
+    --bg-veil-b: 0.9;
   }
 
   * {
@@ -103,13 +109,15 @@
     @apply bg-background text-foreground antialiased;
     min-height: 100dvh;
     font-family: 'Resource Han Rounded CN', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-    /* 鲸鱼背景图（public/images/whale-bg.jpg），上层水色薄纱保证内容可读 */
+    /* 鲸鱼背景图（public/images/whale-bg.jpg），上层水色薄纱保证内容可读；暗色下透明度由 --bg-veil-* 加深 */
     background-image:
-      linear-gradient(hsl(var(--background) / 0.55), hsl(var(--background) / 0.65)),
+      linear-gradient(hsl(var(--background) / var(--bg-veil-a)), hsl(var(--background) / var(--bg-veil-b))),
       url('/images/whale-bg.jpg');
     background-size: auto, cover;
     background-position: center, center;
     background-repeat: no-repeat, no-repeat;
+    /* 主题切换时颜色过渡更柔和（不做全局过渡，避免与拖拽动画冲突） */
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 }
 

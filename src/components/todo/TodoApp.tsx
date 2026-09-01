@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Download, Moon, Plus, Sun, Tag, Upload, X } from 'lucide-react'
 import { Reorder } from 'motion/react'
-import { Download, Plus, Tag, Upload, X } from 'lucide-react'
+import { useTheme } from 'next-themes'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import PageMeta from '@/components/common/PageMeta'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,27 +17,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import PageMeta from '@/components/common/PageMeta'
-import WhaleMark from './WhaleMark'
-import TaskItem from './TaskItem'
-import {
-  FILTERS,
-  PRESET_TAGS,
-  commitReorder,
-  collectAllDaily,
-  collectAllTags,
-  createTask,
-  currentList,
-  filterByTag,
-  filterTasks,
-  loadData,
-  normalizeTags,
-  saveData,
-  searchDatedTasks,
-  tagColor,
-  todayStr,
-} from '@/lib/todo'
-import type { DatedTask, FilterKey, TabKey, Task, TodoData } from '@/lib/todo'
 import {
   buildBackupFilename,
   csvToTodo,
@@ -43,7 +24,27 @@ import {
   parseCsv,
   todoToCsv,
 } from '@/lib/backup'
+import type { DatedTask, FilterKey, TabKey, Task, TodoData } from '@/lib/todo'
+import {
+  collectAllDaily,
+  collectAllTags,
+  commitReorder,
+  createTask,
+  currentList,
+  FILTERS,
+  filterByTag,
+  filterTasks,
+  loadData,
+  normalizeTags,
+  PRESET_TAGS,
+  saveData,
+  searchDatedTasks,
+  tagColor,
+  todayStr,
+} from '@/lib/todo'
 import TagPicker from './TagPicker'
+import TaskItem from './TaskItem'
+import WhaleMark from './WhaleMark'
 
 export default function TodoApp() {
   const [data, setData] = useState<TodoData>(loadData)
@@ -64,6 +65,9 @@ export default function TodoApp() {
   // 标签：筛选条选中项（null = 不过滤）与添加栏草稿标签
   const [activeTag, setActiveTag] = useState<string | null>(null)
   const [draftTags, setDraftTags] = useState<string[]>([])
+  // 主题：二态切换（浅色/深色），next-themes 负责持久化与 <html> 类名
+  const { resolvedTheme, setTheme } = useTheme()
+  const isDark = resolvedTheme === 'dark'
 
   // 任何数据变化都实时保存
   useEffect(() => {
@@ -329,6 +333,16 @@ export default function TodoApp() {
           </Tabs>
 
           <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+            {/* 主题切换：太阳/月亮图标，二态切换，与导入/导出按钮风格一致 */}
+            <button
+              type="button"
+              onClick={() => setTheme(isDark ? 'light' : 'dark')}
+              title={isDark ? '切换到浅色主题' : '切换到深色主题'}
+              aria-label={isDark ? '切换到浅色主题' : '切换到深色主题'}
+              className="wobble-sm flex size-8 shrink-0 items-center justify-center rounded-md border-2 border-border bg-card text-primary transition-transform hover:bg-muted active:translate-y-0.5"
+            >
+              {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            </button>
             {/* 导入/导出：位于日期选择控件左侧 */}
             <button
               type="button"
@@ -537,7 +551,7 @@ export default function TodoApp() {
                     aria-label={`移除标签 ${tag}`}
                     title={`移除标签 ${tag}`}
                     onClick={() => setDraftTags(draftTags.filter((t) => t !== tag))}
-                    className="rounded-full p-0.5 hover:bg-black/10"
+                    className="rounded-full p-0.5 hover:bg-foreground/10"
                   >
                     <X className="size-2.5" />
                   </button>

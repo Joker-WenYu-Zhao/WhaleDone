@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
-import { Reorder, useDragControls } from 'motion/react'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Check, GripVertical, Pencil, Plus, Trash2, X } from 'lucide-react'
-import { tagColor, taskTags } from '@/lib/todo'
+import { Reorder, useDragControls } from 'motion/react'
+import { useEffect, useRef, useState } from 'react'
+import { Checkbox } from '@/components/ui/checkbox'
 import type { Task } from '@/lib/todo'
+import { tagColor, taskTags } from '@/lib/todo'
 import TagPicker from './TagPicker'
 
 interface TaskItemProps {
@@ -44,7 +44,7 @@ function HighlightedText({ text, keyword }: { text: string; keyword: string }) {
     <>
       {parts.map((p, i) =>
         p.hit ? (
-          <mark key={i} className="rounded-sm bg-yellow-200 px-0.5 text-foreground">
+          <mark key={i} className="rounded-sm bg-yellow-200 px-0.5 text-foreground dark:bg-yellow-400/30 dark:text-yellow-50">
             {p.text}
           </mark>
         ) : (
@@ -167,7 +167,7 @@ export default function TaskItem({
                     aria-label={`移除标签 ${tag}`}
                     title={`移除标签 ${tag}`}
                     onClick={() => setDraftTags(draftTags.filter((t) => t !== tag))}
-                    className="rounded-full p-0.5 hover:bg-black/10"
+                    className="rounded-full p-0.5 hover:bg-foreground/10"
                   >
                     <X className="size-2.5" />
                   </button>
