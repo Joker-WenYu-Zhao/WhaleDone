@@ -192,3 +192,41 @@ export function filterByTag(items: DatedTask[], tag: string | null): DatedTask[]
   if (!tag) return items
   return items.filter(({ task }) => taskTags(task).includes(tag))
 }
+
+/**
+ * 批量迁移：把选中任务从原位置（任意日期或长期列表）摘除，追加到目标日期末尾。
+ * 保留任务全部属性（done/text/tags）与各自原列表内的相对顺序；长期事项迁入日期即转为当日待办。
+ * 原日期列表被搬空后保留空数组键（不删除日期键）；纯函数不碰 localStorage，由调用方写回。
+ */
+export function migrateTasks(data: TodoData, ids: string[], targetDate: string): TodoData {
+  const idSet = new Set(ids)
+  const moved: Task[] = []
+  const daily: Record<string, Task[]> = {}
+  for (const [key, list] of Object.entries(data.daily)) {
+    daily[key] = list.filter((t) => {
+      if (idSet.has(t.id)) {
+        moved.push(t)
+        return false
+      }
+      return true
+    })
+  }
+  const longterm = data.longterm.filter((t) => {
+    if (idSet.has(t.id)) {
+      moved.push(t)
+      return false
+    }
+    return true
+  })
+  return { daily: { ...daily, [targetDate]: [...(daily[targetDate] ?? []), ...moved] }, longterm }
+}
+
+/** 批量删除：从所有日期与长期列表中移除选中任务（原日期列表被清空后保留空数组键；纯函数不碰 localStorage） */
+export function removeTasks(data: TodoData, ids: string[]): TodoData {
+  const idSet = new Set(ids)
+  const daily: Record<string, Task[]> = {}
+  for (const [key, list] of Object.entries(data.daily)) {
+    daily[key] = list.filter((t) => !idSet.has(t.id))
+  }
+  return { daily, longterm: data.longterm.filter((t) => !idSet.has(t.id)) }
+}

@@ -1,5 +1,5 @@
-import { Download, Moon, Plus, Sun, Tag, Upload, X } from 'lucide-react'
-import { Reorder } from 'motion/react'
+import { Download, Moon, MoveRight, Plus, Sun, Tag, Trash2, Upload, X } from 'lucide-react'
+import { AnimatePresence, motion, Reorder } from 'motion/react'
 import { useTheme } from 'next-themes'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -15,6 +15,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -35,8 +36,10 @@ import {
   filterByTag,
   filterTasks,
   loadData,
+  migrateTasks,
   normalizeTags,
   PRESET_TAGS,
+  removeTasks,
   saveData,
   searchDatedTasks,
   tagColor,
@@ -65,6 +68,14 @@ export default function TodoApp() {
   // 标签：筛选条选中项（null = 不过滤）与添加栏草稿标签
   const [activeTag, setActiveTag] = useState<string | null>(null)
   const [draftTags, setDraftTags] = useState<string[]>([])
+  // 批量迁移：选中任务 id 集合与目标日期弹窗（单步确认）
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [migrateOpen, setMigrateOpen] = useState(false)
+  const [migrateDate, setMigrateDate] = useState(todayStr())
+  // 批量删除二次确认弹窗（风险操作，与迁移弹窗同风格）
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  // 标签筛选作用域：仅今天（当前日期 ∩ 标签）/ 全部日期（跨日期历史查询）
+  const [tagScope, setTagScope] = useState<'today' | 'all'>('today')
   // 主题：二态切换（浅色/深色），next-themes 负责持久化与 <html> 类名
   const { resolvedTheme, setTheme } = useTheme()
   const isDark = resolvedTheme === 'dark'
@@ -73,6 +84,12 @@ export default function TodoApp() {
   useEffect(() => {
     saveData(data)
   }, [data])
+
+  // 列表上下文变化（切日期/Tab、状态筛选、标签筛选、搜索）时清空批量选择；取消标签后作用域回归「仅今天」并置灰
+  useEffect(() => {
+    setSelectedIds([])
+    if (!activeTag) setTagScope('today')
+  }, [tab, date, activeTag, filter, searchKeyword, tagScope])
 
   // 添加框高度随内容自适应（上限 120px，超出内部滚动）
   useEffect(() => {
@@ -86,6 +103,8 @@ export default function TodoApp() {
   const doneCount = tasks.filter((t) => t.done).length
   const isToday = date === todayStr()
   const isSearchMode = searchKeyword.trim() !== ''
+  /** 标签历史模式：每日 Tab + 非搜索 + 作用域「全部日期」+ 已选标签时，跨全部日期查该标签的每日待办 */
+  const isTagHistory = tab === 'daily' && !isSearchMode && tagScope === 'all' && activeTag !== null
 
   /** 全库已使用的标签（筛选条数据源）与候选标签（预置 ∪ 全库，选择器数据源） */
   const usedTags = useMemo(() => collectAllTags(data), [data])
@@ -106,6 +125,12 @@ export default function TodoApp() {
           ? collectAllDaily(data)
           : data.longterm.map((task) => ({ task, date: null as string | null }))
       source = searchDatedTasks(all, searchKeyword)
+    } else if (isTagHistory) {
+      // 标签历史模式：跨全部日期收集每日待办，按日期倒序、同日期内已完成优先；标签过滤由末尾 filterByTag 统一处理
+      source = collectAllDaily(data).sort((a, b) => {
+        if (a.date !== b.date) return (b.date ?? '').localeCompare(a.date ?? '')
+        return Number(b.task.done) - Number(a.task.done)
+      })
     } else {
       source = tasks.map((task) => ({ task, date: null }))
     }
@@ -116,12 +141,31 @@ export default function TodoApp() {
           ? source.filter(({ task }) => task.done)
           : source
     return filterByTag(filtered, activeTag)
-  }, [isSearchMode, tasks, tab, data, searchKeyword, filter, activeTag])
+  }, [isSearchMode, isTagHistory, tasks, tab, data, searchKeyword, filter, activeTag])
+
+  // 列表内容变化后剔除已不存在的选中项（如手动删除了选中的任务）
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const ids = new Set(listItems.map(({ task }) => task.id))
+      const next = prev.filter((id) => ids.has(id))
+      return next.length === prev.length ? prev : next
+    })
+  }, [listItems])
 
   /** 清空搜索：恢复按当前 Tab + 状态筛选的正常查询，不抢焦点 */
   const resetSearch = () => {
     setSearchInput('')
     setSearchKeyword('')
+  }
+
+  /** 切换大 Tab：一切查询条件回归默认（搜索/标签/作用域/状态筛选），日期选择保留不动 */
+  const handleTabChange = (next: string) => {
+    setTab(next as TabKey)
+    setSearchInput('')
+    setSearchKeyword('')
+    setActiveTag(null)
+    setTagScope('today')
+    setFilter('all')
   }
 
   /** 回车提交搜索：把输入框当前值作为生效关键词 */
@@ -162,7 +206,8 @@ export default function TodoApp() {
   }
 
   const toggleTask = (id: string) => {
-    if (isSearchMode) {
+    // 搜索 / 标签历史模式下列表跨日期展示，必须全库按 ID 定位，否则非当天事项操作无效
+    if (isSearchMode || isTagHistory) {
       mutateTaskById(id, (t) => ({ ...t, done: !t.done }))
       return
     }
@@ -170,7 +215,7 @@ export default function TodoApp() {
   }
 
   const deleteTask = (id: string) => {
-    if (isSearchMode) {
+    if (isSearchMode || isTagHistory) {
       removeTaskById(id)
       return
     }
@@ -184,14 +229,14 @@ export default function TodoApp() {
       text,
       ...(tags === undefined ? {} : { tags: normalizeTags(tags) }),
     })
-    if (isSearchMode) {
+    if (isSearchMode || isTagHistory) {
       mutateTaskById(id, applyTags)
       return
     }
     updateList((list) => list.map((t) => (t.id === id ? applyTags(t) : t)))
   }
 
-  /** 按 id 在全量数据中修改任务（搜索模式下命中项可能来自其他日期） */
+  /** 按 id 在全量数据中修改任务（搜索 / 标签历史模式下命中项可能来自其他日期） */
   const mutateTaskById = (id: string, mutate: (t: Task) => Task) => {
     setData((prev) => {
       for (const key of Object.keys(prev.daily)) {
@@ -218,6 +263,52 @@ export default function TodoApp() {
       }
       return { ...prev, longterm: prev.longterm.filter((t) => t.id !== id) }
     })
+  }
+
+  /* ===== 批量迁移 ===== */
+
+  /** 批量选择全模式开放（迁移/删除按任务 ID 全库操作，与视图无关）；跨日期视图仅禁拖拽 */
+  const batchEnabled = true
+  /** 全选 = 当前可见列表全部命中选中集合（派生，不单独存状态） */
+  const allSelected =
+    batchEnabled && listItems.length > 0 && listItems.every(({ task }) => selectedIds.includes(task.id))
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  /** 全选/取消全选当前列表（仅作用于当前筛选条件下的可见项） */
+  const toggleSelectAll = () => {
+    setSelectedIds(allSelected ? [] : listItems.map(({ task }) => task.id))
+  }
+
+  /** 打开迁移弹窗：目标日期每次重置为今天 */
+  const openMigrate = () => {
+    setMigrateDate(todayStr())
+    setMigrateOpen(true)
+  }
+
+  /** 执行迁移：写回数据、清空选中、Toast 反馈（长期事项迁入日期即转为当日待办） */
+  const confirmMigrate = () => {
+    const count = selectedIds.length
+    setData((prev) => migrateTasks(prev, selectedIds, migrateDate))
+    setSelectedIds([])
+    setMigrateOpen(false)
+    toast.success(`已成功迁移 ${count} 项待办至 ${migrateDate}`)
+  }
+
+  /** 打开批量删除确认弹窗（破坏性操作，二次确认后执行） */
+  const openBatchDelete = () => {
+    setDeleteOpen(true)
+  }
+
+  /** 执行批量删除：写回数据、清空选中、关弹窗、Toast 反馈 */
+  const confirmBatchDelete = () => {
+    const count = selectedIds.length
+    setData((prev) => removeTasks(prev, selectedIds))
+    setSelectedIds([])
+    setDeleteOpen(false)
+    toast.success(`已删除 ${count} 项待办`)
   }
 
   /** 点击日期输入框任意位置都弹出日历（showPicker 不支持时静默降级为原生交互） */
@@ -280,6 +371,9 @@ export default function TodoApp() {
   if (isSearchMode && listItems.length === 0) {
     emptyMain = '没有找到相关事项'
     emptySub = '换个关键词试试吧'
+  } else if (isTagHistory && listItems.length === 0) {
+    emptyMain = '所有日期里都没有带这个标签的事项'
+    emptySub = '换个标签或切回「仅今天」试试'
   } else if (activeTag && listItems.length === 0) {
     emptyMain = '这个标签下还没有事项'
     emptySub = '换个标签或清掉筛选试试'
@@ -315,7 +409,7 @@ export default function TodoApp() {
 
         {/* Tab + 日期选择 */}
         <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
-          <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
+          <Tabs value={tab} onValueChange={handleTabChange}>
             <TabsList className="wobble-sm doodle-shadow-sm h-auto gap-1.5 border-2 border-border bg-card p-1">
               <TabsTrigger
                 value="daily"
@@ -440,6 +534,17 @@ export default function TodoApp() {
             <span className="shrink-0 text-xs text-muted-foreground">找到 {listItems.length} 项</span>
           )}
 
+          {/* 方案 B：极小全选框常驻（实心=全选，蓝描边=部分选中），批量操作收进列表内悬浮工具条 */}
+          {batchEnabled && listItems.length > 0 && (
+            <Checkbox
+              checked={allSelected ? true : selectedIds.length > 0 ? 'indeterminate' : false}
+              onCheckedChange={toggleSelectAll}
+              aria-label="全选 / 取消全选"
+              title="全选 / 取消全选"
+              className="size-4 shrink-0"
+            />
+          )}
+
           {/* 搜索框：回车触发查询，× 清空并自动查询一次（恢复全部） */}
           <div className="relative ml-auto w-36 shrink-0">
             <Input
@@ -468,32 +573,119 @@ export default function TodoApp() {
           </div>
         </div>
 
-        {/* 标签筛选条：仅当全库存在已使用标签时显示；单选可取消，不选 = 显示全部 */}
+        {/* 标签筛选行：标签 chips（小胶囊流式排列，宽度随文字自适应）+ 作用域分段控件（选中标签后才可切换） */}
         {usedTags.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 px-4 pb-3">
-            <span className="shrink-0 text-xs text-muted-foreground">标签</span>
-            {usedTags.map(({ name, count }) => (
-              <button
-                key={name}
-                type="button"
-                aria-pressed={activeTag === name}
-                title={`筛选标签「${name}」，再点一次取消`}
-                onClick={() => setActiveTag(activeTag === name ? null : name)}
-                className={`wobble-sm rounded-full border px-2.5 py-1 text-xs font-medium transition-transform active:translate-y-0.5 ${tagColor(name)} ${
-                  activeTag === name
-                    ? 'font-semibold ring-2 ring-primary/40'
-                    : 'opacity-75 hover:opacity-100'
-                }`}
-              >
-                {name}
-                <span className="ml-1 opacity-60">{count}</span>
-              </button>
-            ))}
+          <div className="flex items-start gap-2 px-4 pb-3">
+            <span className="shrink-0 pt-1 text-xs text-muted-foreground">标签</span>
+                <div className="flex flex-1 flex-wrap gap-1.5">
+                  {usedTags.map(({ name, count }) => (
+                    <button
+                      key={name}
+                      type="button"
+                      aria-pressed={activeTag === name}
+                      title={`筛选标签「${name}」，再点一次取消`}
+                      onClick={() => setActiveTag(activeTag === name ? null : name)}
+                      className={`wobble-sm rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-transform active:translate-y-0.5 ${tagColor(name)} ${
+                        activeTag === name
+                          ? 'font-semibold ring-2 ring-primary/40'
+                          : 'opacity-75 hover:opacity-100'
+                      }`}
+                    >
+                      {name}
+                      <span className="ml-1 opacity-60">{count}</span>
+                    </button>
+                  ))}
+                </div>
+                {tab === 'daily' && (
+                  <button
+                    type="button"
+                    aria-pressed={tagScope === 'all'}
+                    aria-label="标签筛选范围"
+                    disabled={isSearchMode || activeTag === null}
+                    title={
+                      activeTag === null
+                        ? '先选中一个标签后才能切换查询范围'
+                        : '点击在「仅今天 / 全部日期」之间切换'
+                    }
+                    onClick={() => setTagScope(tagScope === 'today' ? 'all' : 'today')}
+                    className="wobble-sm flex shrink-0 items-center rounded-full border-2 border-border bg-card p-0.5 transition-transform active:translate-y-0.5 disabled:pointer-events-none disabled:opacity-50"
+                  >
+                    {/* 整块可点：点任意处即在两档间切换，当前生效档高亮 */}
+                    <span
+                      className={`rounded-full px-2 py-1 text-[10px] font-medium transition-colors ${
+                        tagScope === 'today'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      仅今天
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-1 text-[10px] font-medium transition-colors ${
+                        tagScope === 'all'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      全部日期
+                    </span>
+                  </button>
+                )}
           </div>
         )}
 
-        {/* 任务列表（固定窗口内滚动） */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
+        {/* 任务列表（固定窗口内滚动）：外框 relative 承载悬浮工具条；工具条绝对定位不占文档流，出现/消失任务零位移 */}
+        <div className="relative min-h-0 flex-1">
+          {/* 方案 B：选中即浮现的悬浮工具条（浮层吸顶，✕ 一键清空；外层不拦截点击，仅本体可交互） */}
+          <AnimatePresence>
+            {batchEnabled && selectedIds.length > 0 && listItems.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -8, scale: 0.94 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.94 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                className="pointer-events-none absolute inset-x-0 top-1.5 z-20 flex justify-center"
+              >
+                <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-border bg-card/95 px-1.5 py-1 shadow-lg backdrop-blur">
+                <span className="pl-2 pr-1 text-xs font-semibold">已选 {selectedIds.length} 项</span>
+                <button
+                  type="button"
+                  onClick={toggleSelectAll}
+                  className="rounded-full px-2.5 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+                >
+                  {allSelected ? '取消全选' : '全选'}
+                </button>
+                <button
+                  type="button"
+                  onClick={openMigrate}
+                  className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-muted"
+                >
+                  <MoveRight className="size-3.5" />
+                  迁移
+                </button>
+                <button
+                  type="button"
+                  onClick={openBatchDelete}
+                  title="删除选中项"
+                  aria-label="删除选中项"
+                  className="rounded-full p-1.5 text-accent transition-colors hover:bg-muted"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds([])}
+                  title="清空选择"
+                  aria-label="清空选择"
+                  className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted"
+                >
+                  <X className="size-3.5" />
+                </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <div className="h-full overflow-y-auto px-4 pb-2">
           {listItems.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-8 text-center">
               <WhaleMark className="w-28 -rotate-2 opacity-90" />
@@ -515,9 +707,20 @@ export default function TodoApp() {
                   key={item.task.id}
                   task={item.task}
                   index={i + 1}
-                  dateLabel={item.date && item.date !== date ? item.date.slice(5) : null}
+                  dateLabel={
+                    isTagHistory
+                      ? item.date
+                        ? item.date.slice(5)
+                        : null
+                      : item.date && item.date !== date
+                        ? item.date.slice(5)
+                        : null
+                  }
                   highlight={isSearchMode ? searchKeyword : undefined}
-                  dragDisabled={isSearchMode}
+                  dragDisabled={isSearchMode || isTagHistory}
+                  selectable={batchEnabled}
+                  selected={selectedIds.includes(item.task.id)}
+                  onToggleSelect={toggleSelect}
                   tagCandidates={tagCandidates}
                   onToggle={toggleTask}
                   onDelete={deleteTask}
@@ -527,6 +730,7 @@ export default function TodoApp() {
             </Reorder.Group>
             </>
           )}
+          </div>
         </div>
 
         {/* 添加任务 */}
@@ -618,6 +822,45 @@ export default function TodoApp() {
             <AlertDialogFooter>
               <AlertDialogCancel>取消</AlertDialogCancel>
               <AlertDialogAction onClick={confirmImport}>确认导入</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* 迁移弹窗：选择目标日期（默认今天），确认后单步执行 */}
+        <AlertDialog open={migrateOpen} onOpenChange={setMigrateOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>迁移选中的 {selectedIds.length} 项待办</AlertDialogTitle>
+              <AlertDialogDescription>
+                选择目标日期，迁移后原位置（原日期或长期列表）将不再保留这些事项。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <Input
+              type="date"
+              value={migrateDate}
+              onChange={(e) => setMigrateDate(e.target.value || todayStr())}
+              aria-label="目标日期"
+              className="wobble-sm w-full cursor-pointer"
+            />
+            <AlertDialogFooter>
+              <AlertDialogCancel>取消</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmMigrate}>确认迁移</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* 批量删除二次确认：与迁移弹窗同风格，确认按钮样式也保持一致 */}
+        <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>删除选中的 {selectedIds.length} 项待办</AlertDialogTitle>
+              <AlertDialogDescription>
+                删除后无法恢复，将从原日期或长期列表中移除这些事项。如有需要可先导出 CSV 备份。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>取消</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmBatchDelete}>确认删除</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

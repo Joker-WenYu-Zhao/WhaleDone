@@ -1,4 +1,4 @@
-import { Check, GripVertical, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Check, Circle, GripVertical, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { Reorder, useDragControls } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -16,6 +16,12 @@ interface TaskItemProps {
   highlight?: string
   /** 搜索生效时禁用拖拽（隐藏把手） */
   dragDisabled?: boolean
+  /** 是否显示批量选择复选框（全模式显示：标签历史/搜索模式下同样可用） */
+  selectable?: boolean
+  /** 是否已被批量选中 */
+  selected?: boolean
+  /** 勾选/取消批量选择 */
+  onToggleSelect?: (id: string) => void
   /** 标签候选（预置 ∪ 全库已有，编辑态选择器用） */
   tagCandidates: string[]
   onToggle: (id: string) => void
@@ -61,6 +67,9 @@ export default function TaskItem({
   dateLabel,
   highlight,
   dragDisabled,
+  selectable,
+  selected,
+  onToggleSelect,
   tagCandidates,
   onToggle,
   onDelete,
@@ -113,7 +122,14 @@ export default function TaskItem({
       dragListener={false}
       dragControls={controls}
       whileDrag={{ scale: 1.04, rotate: 1 }}
-      className="wobble-sm doodle-shadow-sm relative z-10 flex items-center gap-2 border-2 border-border bg-card px-2.5 py-1.5"
+      // 完成态视觉（方案对比后定稿）：
+      // 方案 A（已弃用，留档）：整卡降透明度 transition-opacity + opacity-[.58]，标签行 opacity-75
+      // 方案 B（当前启用）：淡绿底 + 绿边框 + 左缘绿色竖条；暗色主题用深绿变体
+      className={`wobble-sm doodle-shadow-sm relative z-10 flex items-center gap-2 border-2 px-2.5 py-1.5 transition-colors ${
+        task.done
+          ? 'border-[hsl(152,45%,82%)] bg-[hsl(152,55%,95%)] shadow-[inset_3px_0_0_hsl(152,55%,42%)] dark:border-[hsl(152,30%,28%)] dark:bg-[hsl(152,35%,16%)] dark:shadow-[inset_3px_0_0_hsl(152,45%,45%)]'
+          : 'border-border bg-card'
+      }`}
     >
       {/* 序号 / 所属日期标记（搜索命中其他日期任务时） */}
       {dateLabel ? (
@@ -126,13 +142,15 @@ export default function TaskItem({
         </span>
       )}
 
-      {/* 勾选框 */}
-      <Checkbox
-        checked={task.done}
-        onCheckedChange={() => onToggle(task.id)}
-        aria-label={task.done ? '标记为待办' : '标记为已完成'}
-        className="h-5 w-5 wobble-sm border-2 border-border data-[state=checked]:border-primary"
-      />
+      {/* 批量选择复选框：仅标记待迁移任务，不改变完成状态 */}
+      {selectable && (
+        <Checkbox
+          checked={selected}
+          onCheckedChange={() => onToggleSelect?.(task.id)}
+          aria-label={selected ? '取消选择该任务' : '选择该任务'}
+          className="h-5 w-5 wobble-sm shrink-0 border-2 border-border data-[state=checked]:border-primary"
+        />
+      )}
 
       {editing ? (
         <>
@@ -214,12 +232,16 @@ export default function TaskItem({
           <div className="min-w-0 flex-1">
             <span
               className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${
-                task.done ? 'task-done-text text-muted-foreground' : 'text-foreground'
+                task.done
+                  ? // 方案 A（已弃用）：task-done-text text-muted-foreground；方案 B：绿划线 + 绿灰文字
+                    'line-through decoration-2 decoration-[hsl(152,45%,55%)] text-[hsl(152,30%,35%)] dark:decoration-[hsl(152,40%,40%)] dark:text-[hsl(152,25%,65%)]'
+                  : 'text-foreground'
               }`}
             >
               {highlight ? <HighlightedText text={task.text} keyword={highlight} /> : task.text}
             </span>
             {taskTags(task).length > 0 && (
+              // 方案 B：标签行不额外降淡（降淡是方案 A 的做法）
               <div className="mt-1 flex flex-wrap gap-1">
                 {taskTags(task).map((tag) => (
                   <span
@@ -232,6 +254,21 @@ export default function TaskItem({
               </div>
             )}
           </div>
+
+          {/* 状态切换按钮：点击切换完成/待办（原左侧勾选框的职责移至此处） */}
+          <button
+            type="button"
+            aria-label={task.done ? '标记为待办' : '标记为已完成'}
+            title={task.done ? '标记为待办' : '标记为已完成'}
+            onClick={() => onToggle(task.id)}
+            className={`flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors active:scale-90 ${
+              task.done
+                ? 'text-primary hover:bg-primary/15'
+                : 'text-muted-foreground hover:bg-muted hover:text-primary'
+            }`}
+          >
+            {task.done ? <Check className="size-5" /> : <Circle className="size-5" />}
+          </button>
 
           {/* 拖拽把手（搜索生效时隐藏，避免跨日期排序错乱） */}
           {!dragDisabled && (

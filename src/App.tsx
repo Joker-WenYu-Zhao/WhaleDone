@@ -31,7 +31,8 @@ const App: React.FC = () => {
           </Routes>
         </main>
       </div>
-      <Toaster />
+      {/* 提示浮层统一顶部居中（批量迁移等操作反馈在视线上方，不易遗漏） */}
+      <Toaster position="top-center" />
       {/*</RouteGuard>*/}
       {/*</AuthProvider>*/}
     </Router>
